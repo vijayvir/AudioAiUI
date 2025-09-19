@@ -36,9 +36,9 @@ A React + TypeScript + Vite application implementing the AudioAI marketing and i
 ### System Architecture (High-Level)
 ```mermaid
 flowchart LR
-  A[User Browser] --> B[React App (Vite, TS, Tailwind)]
-  B --> C[UI Components (Atomic Design)]
-  B -. future .-> D[(External APIs / AudioAI Services)]
+  A[User Browser] --> B[React App — Vite + TypeScript + Tailwind CSS]
+  B --> C[UI Components — Atomic Design]
+  B -. "future" .-> D[(External APIs / AudioAI Services)]
 ```
 
 ### Component Relationships
