@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createClient } from "@deepgram/sdk";
 import "./App.css";
+import JSZip from "jszip";
+
 
 export default function App() {
   const [tab, setTab] = useState("stt"); // stt | tts | agent | intel (UI only)
@@ -10,6 +12,8 @@ export default function App() {
   const [finalText, setFinalText] = useState("");     // committed text
   const [partialText, setPartialText] = useState(""); // live partial line
   const [canCopy, setCanCopy] = useState(false);
+  const [audioChunks, setAudioChunks] = useState([]);
+  const [audioBlob, setAudioBlob] = useState(null);
 
   // Deepgram & recording refs
   const deepgramRef = useRef(null);
@@ -94,10 +98,13 @@ export default function App() {
       mediaRecorderRef.current = mr;
 
       mr.addEventListener("dataavailable", (evt) => {
-        if (evt.data.size > 0 && socket.getReadyState() === 1) {
-          socket.send(evt.data);
-        }
-      });
+  if (evt.data.size > 0) {
+    setAudioChunks((prev) => [...prev, evt.data]);
+    if (socket.getReadyState() === 1) {
+      socket.send(evt.data);
+    }
+  }
+});
 
       // small chunk for low latency
       mr.start(250);
@@ -186,15 +193,55 @@ export default function App() {
     } catch {}
   };
 
-  const onDownload = () => {
-    const blob = new Blob([displayText.trim()], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "transcript.txt";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  // Download transcript only
+// const onDownload = () => {
+//   if (!displayText.trim()) return;
+//   const blob = new Blob([displayText.trim()], { type: "text/plain" });
+//   const url = URL.createObjectURL(blob);
+//   const a = document.createElement("a");
+//   a.href = url;
+//   a.download = "transcript.txt";
+//   a.click();
+//   URL.revokeObjectURL(url);
+// };
+
+// Download audio only
+// const onDownloadAudio = () => {
+//   if (!audioChunks.length) {
+//     alert("No audio recorded yet!");
+//     return;
+//   }
+//   const blob = new Blob(audioChunks, { type: "audio/webm" });
+//   const url = URL.createObjectURL(blob);
+//   const a = document.createElement("a");
+//   a.href = url;
+//   a.download = "recording.webm";
+//   a.click();
+//   URL.revokeObjectURL(url);
+// };
+
+// Download both as ZIP
+const onDownloadAll = async () => {
+  if (!audioChunks.length || !displayText.trim()) {
+    alert("Need both transcript and audio!");
+    return;
+  }
+
+  const zip = new JSZip();
+  zip.file("transcript.txt", displayText.trim());
+
+  const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+  const audioBuffer = await audioBlob.arrayBuffer();
+  zip.file("recording.webm", audioBuffer);
+
+  const content = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(content);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "speech_session.zip";
+  a.click();
+  URL.revokeObjectURL(url);
+};
 
   return (
     <div className="app">
@@ -207,7 +254,7 @@ export default function App() {
           >
             <span className="tab-emoji">🗣️</span> Speech to Text
           </button>
-          <button className={`tab ${tab === "tts" ? "muted" : ""}`} onClick={() => setTab("tts")}>
+          {/* <button className={`tab ${tab === "tts" ? "muted" : ""}`} onClick={() => setTab("tts")}>
             <span className="tab-emoji">🔊</span> Text to Speech
           </button>
           <button className={`tab ${tab === "agent" ? "muted" : ""}`} onClick={() => setTab("agent")}>
@@ -215,7 +262,7 @@ export default function App() {
           </button>
           <button className={`tab ${tab === "intel" ? "muted" : ""}`} onClick={() => setTab("intel")}>
             <span className="tab-emoji">🧠</span> Audio Intelligence
-          </button>
+          </button> */}
         </div>
 
         {/* Controls row */}
@@ -227,14 +274,14 @@ export default function App() {
             disabled={isRecording}
           >
             <option value="en-US">English</option>
-            <option value="es">Spanish</option>
+            {/* <option value="es">Spanish</option>
             <option value="fr">French</option>
-            <option value="hi">Hindi</option>
+            <option value="hi">Hindi</option> */}
           </select>
 
           {!isRecording ? (
             <button className="speak" onClick={startLive}>
-              <span className="mic">🎤</span> Speak
+              <span className="mic">🎤</span> Start Recording
             </button>
           ) : (
             <button className="stop" onClick={stopLive}>
@@ -251,7 +298,7 @@ export default function App() {
             <div className="text">{displayText}</div>
           ) : (
             <div className="hint">
-              Speak your mind, we’ll turn it into text. No typos, no autocorrect drama. Live transcripts appear here.
+              Speak your mind, we’ll turn it into text. No typos, no autocorrect. Live transcripts appear here.
             </div>
           )}
         </div>
@@ -265,26 +312,35 @@ export default function App() {
 
         {/* Use your own file */}
         <label className="file-btn">
-          Use Your Own File ⟳
+          Use Your Own File
           <input type="file" accept="audio/*,video/*" onChange={onPickFile} hidden />
         </label>
 
         {/* Transcribe Live (alt start) */}
         <button className="transcribe" onClick={isRecording ? stopLive : startLive}>
-          {isRecording ? "Stop Live Transcription" : "Transcribe Live"}
+          {isRecording ? "Stop Live Transcription" : "Proceed to Transcribe"}
         </button>
 
         {/* Footer actions */}
-        <div className="footer">
+       <div className="footer">
           <button className="link" onClick={onCopy} disabled={!canCopy}>
-            Copy
+          Copy
           </button>
-          <button className="link" onClick={onDownload} disabled={!canCopy}>
-            Download
+      {/* <button className="link" onClick={onDownload} disabled={!canCopy}>
+          Download Transcript
           </button>
-          <button className="link" onClick={() => window.open("https://developers.deepgram.com", "_blank")}>
-            Explore More Features
+          <button className="link" onClick={onDownloadAudio} disabled={!audioBlob}>
+          Download Audio
+          </button> */}
+          <button className="link" onClick={onDownloadAll} disabled={!audioBlob || !canCopy}>
+          Download
           </button>
+          {/* <button
+          className="link"
+          onClick={() => window.open("https://developers.deepgram.com", "_blank")}
+          >
+          Explore More Features
+          </button> */}
         </div>
       </div>
     </div>
