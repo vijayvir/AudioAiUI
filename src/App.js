@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import "./App.css";
-import JSZip from "jszip";
+
+// Note: JSZip is no longer strictly necessary since the server is handling the zipping, 
+// but we keep the import in case of future use.
+// import JSZip from "jszip"; 
 
 // --- ENVIRONMENT VARIABLES ---
 // Ensure your .env file is loaded correctly by your React setup (e.g., CRA or Vite)
@@ -16,11 +19,15 @@ export default function App() {
   const [partialText, setPartialText] = useState("");
   const [canCopy, setCanCopy] = useState(false);
   
+  // NEW STATE: To hold the download URL provided by the server after live session ends
+  const [setDownloadUrl] = useState(null); 
+  const [sessionId, setSessionId] = useState(null); 
+  
   const [audioChunks, setAudioChunks] = useState([]); 
-  const [audioBlob, setAudioBlob] = useState(null); 
+  const [audioBlob, setAudioBlob] = useState(null); // Used to indicate if recording occurred
   
   const [fileToProcess, setFileToProcess] = useState(null); 
-  const [copyMessage] = useState(null); 
+  const [copyMessage] = useState(null); // Renamed copyMessage to use setState
 
   // Refs for Web Audio API components (Live Transcription)
   const socketRef = useRef(null);
@@ -37,6 +44,18 @@ export default function App() {
 
   useEffect(() => {}, []);
 
+  // Utility to handle generic download of a blob
+  const triggerDownload = (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   // ---- LIVE TRANSCRIBE (USING WEB AUDIO API for 16kHz PCM) ----
   const startLive = async () => {
     try {
@@ -47,6 +66,8 @@ export default function App() {
       setCanCopy(false);
       setAudioBlob(null);
       setFileToProcess(null);
+      setDownloadUrl(null); // Clear previous download URL
+      setSessionId(null); // Clear previous session ID
 
       // Request media stream
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -60,7 +81,7 @@ export default function App() {
       // WebSocket connection
       setStatus("Connecting to Local Backend…");
       
-      // FIX: Construct the URL to match the full FastAPI path: /api/live-transcribe
+      // Construct the URL to match the full FastAPI path: /api/live-transcribe
       const cleanedWsBase = WS_BASE_URL.replace(/\/$/, '').replace('/ws', '');
       const ws = new WebSocket(cleanedWsBase + "/api/live-transcribe");
       socketRef.current = ws;
@@ -108,6 +129,8 @@ export default function App() {
         };
 
         mr.onstop = () => {
+            // This is primarily for the audioBlob state indicator, 
+            // the server-side recording is handled by the WebSocket messages.
             const blob = new Blob(audioChunks, { type: "audio/webm" });
             setAudioBlob(blob);
             setAudioChunks([]); 
@@ -120,6 +143,18 @@ export default function App() {
         try {
           const data = JSON.parse(msg.data);
           const text = data?.text || "";
+
+          // Handle session start and end messages from the server
+          if (data.type === "session_start" && data.session_id) {
+              setSessionId(data.session_id);
+              return;
+          }
+          
+          if (data.type === "session_end" && data.download_url) {
+              setDownloadUrl(data.download_url); // Store the URL for download
+              setStatus("Session Ended. Transcript and audio saved on server.");
+              return;
+          }
 
           if (!text) return;
 
@@ -173,6 +208,7 @@ export default function App() {
       }
       
       // 4. Close WebSocket
+      // The server will handle sending the session_end and download URL on close
       if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
         socketRef.current.close();
       }
@@ -185,10 +221,39 @@ export default function App() {
       socketRef.current = null;
 
       setIsRecording(false);
-      setStatus(prev => prev.startsWith("Connected") || prev.startsWith("Streaming") ? "Stopped" : prev);
       setPartialText("");
     }
   };
+  
+  // ---- LIVE SESSION DOWNLOAD (NEW FUNCTION) ----
+  const onDownloadSession = async () => {
+    if (!sessionId) {
+      alert("No active session to download.");
+      return;
+    }
+
+    setStatus("Downloading session files...");
+
+    try {
+      const response = await fetch(
+        API_BASE_URL.replace(/\/$/, '') + `/api/download-transcription/${sessionId}`
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Download Failed (HTTP ${response.status}): ${errorText}`);
+      }
+
+      const blob = await response.blob();
+      triggerDownload(blob, `session_${sessionId}.zip`);
+      setStatus("Download Complete.");
+    } catch (err) {
+      console.error("Download error:", err);
+      setStatus("Download Failed");
+      alert(err.message || "Failed to download session files from server.");
+    }
+  };
+
 
   // ---- FILE SELECTION (STEP 1) ----
   const onPickFile = (e) => {
@@ -196,6 +261,7 @@ export default function App() {
     
     stopLive(); 
     setAudioBlob(null);
+    setDownloadUrl(null); // Ensure live download state is clear
 
     if (file) {
       setFileToProcess(file);
@@ -211,7 +277,7 @@ export default function App() {
     e.target.value = "";
   };
 
-  // ---- FILE UPLOAD & TRANSCRIBE (STEP 2) ----
+  // ---- FILE UPLOAD & TRANSCRIBE (STEP 2 - Updated for direct ZIP download) ----
   const onProcessFile = async () => {
     if (!fileToProcess) return;
 
@@ -222,7 +288,7 @@ export default function App() {
       setStatus(`Uploading file: ${file.name}...`);
       
       const fd = new FormData();
-      fd.append("file", file); // FIX: Key matches backend parameter 'file'
+      fd.append("file", file);
 
       // --- ENVIRONMENT VARIABLE USED HERE ---
       const uploadRes = await fetch(API_BASE_URL.replace(/\/$/, '') + "/api/file-transcribe", {
@@ -231,21 +297,35 @@ export default function App() {
       });
 
       // 2. Status update during transcription
-      setStatus("Translation in progress...");
+      setStatus("Transcription in progress...");
 
       if (!uploadRes.ok) {
-         const errorText = await uploadRes.text();
-         throw new Error(`Upload Failed (HTTP ${uploadRes.status}): ${errorText}`);
+          // If the server returns a JSON error, try to parse it
+          const errorText = await uploadRes.text();
+          throw new Error(`Upload Failed (HTTP ${uploadRes.status}): ${errorText}`);
       }
       
-      const data = await uploadRes.json();
-      const text = data?.transcription || ""; // FIX: Key matches backend response 'transcription'
+      // 3. Handle the direct ZIP file response
+      const blob = await uploadRes.blob();
+      
+      // Get filename from headers or use a default
+      const contentDisposition = uploadRes.headers.get('Content-Disposition');
+      let filename = Path(file.name).stem + "_transcribed.zip";
+      if (contentDisposition) {
+          const match = contentDisposition.match(/filename="(.+?)"/);
+          if (match && match[1]) {
+              filename = match[1];
+          }
+      }
 
-      // 3. Final status update
-      setAudioBlob(file);
-      setFinalText(text);
-      setStatus("Translation Complete");
-      setCanCopy(!!text);
+      // Trigger the download of the received ZIP file
+      triggerDownload(blob, filename);
+
+      // 4. Final status update
+      setAudioBlob(null); // Clear live audio blob 
+      setFinalText("File processed and ZIP downloaded.");
+      setStatus("File Processed and Downloaded");
+      setCanCopy(true); // Allow copying the new status message
     } catch (err) {
       console.error(err);
       setStatus("Translation Failed");
@@ -260,39 +340,18 @@ export default function App() {
     if (!canCopy) return;
     try {
       await navigator.clipboard.writeText(displayText.trim());
-      alert("Copied to clipboard!");
+      alert("Transcript copied to clipboard!");
     } catch (error) {
         console.error("Copy failed:", error);
         alert("Failed to copy text.");
     }
   };
 
-// Download both as ZIP
-const onDownloadAll = async () => {
-  if (!audioBlob || !displayText.trim()) {
-    alert("Need both transcript and audio!");
-    return;
+  const Path = {
+    stem: (name) => name.split('.').slice(0, -1).join('.'),
   }
 
-  const zip = new JSZip();
-  zip.file("transcript.txt", displayText.trim());
-
-  const audioBuffer = await audioBlob.arrayBuffer();
-  
-  const audioFileName = audioBlob.name && audioBlob.name.length > 0
-    ? audioBlob.name 
-    : "recording.webm";
-
-  zip.file(audioFileName, audioBuffer);
-
-  const content = await zip.generateAsync({ type: "blob" });
-  const url = URL.createObjectURL(content);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "speech_session.zip";
-  a.click();
-  URL.revokeObjectURL(url);
-};
+  // --- Render logic ---
 
   return (
     <div className="app">
@@ -303,7 +362,7 @@ const onDownloadAll = async () => {
             className={`tab ${tab === "stt" ? "active" : ""}`}
             onClick={() => setTab("stt")}
           >
-            <span className="tab-emoji">🗣️</span> Speech to Text
+            <span className="tab-emoji">🗣️</span> Live Recorder
           </button>
         </div>
 
@@ -316,6 +375,9 @@ const onDownloadAll = async () => {
             disabled={isRecording}
           >
             <option value="en-US">English</option>
+            <option value="es-ES">Spanish</option>
+            <option value="fr-FR">French</option>
+            <option value="hi-IN">Hindi</option>
           </select>
 
           {/* Live Recording Controls */}
@@ -344,6 +406,7 @@ const onDownloadAll = async () => {
           ) : (
             <div className="hint">
               Speak your mind, we’ll turn it into text. Live transcripts appear here.
+              {sessionId && <div className="text-xs mt-2 text-gray-400">Session ID: {sessionId}</div>}
             </div>
           )}
         </div>
@@ -356,7 +419,7 @@ const onDownloadAll = async () => {
         </div>
 
         {/* File Selection */}
-        <label className="file-btn">
+        <label className="file-btn" disabled={isRecording}>
           Use Your Own File
           <input 
             type="file" 
@@ -376,12 +439,18 @@ const onDownloadAll = async () => {
         </button>
 
         {/* Footer actions */}
-       <div className="footer">
+        <div className="footer">
           <button className="link" onClick={onCopy} disabled={!canCopy}>
-          Copy
+          Copy Transcript
           </button>
-          <button className="link" onClick={onDownloadAll} disabled={!audioBlob || !canCopy}>
-          Download
+          
+          {/* Download button uses the server-provided URL for live sessions */}
+          <button 
+            className="link" 
+            onClick={onDownloadSession} 
+            disabled={!sessionId}
+          >
+            Download
           </button>
         </div>
       </div>
