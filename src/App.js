@@ -60,9 +60,9 @@ export default function App() {
       // WebSocket connection
       setStatus("Connecting to Local Backend…");
       
-      // FIX: Construct the URL to match the full FastAPI path: /api/ws/transcribe
+      // FIX: Construct the URL to match the full FastAPI path: /api/live-transcribe
       const cleanedWsBase = WS_BASE_URL.replace(/\/$/, '').replace('/ws', '');
-      const ws = new WebSocket(cleanedWsBase + "/api/ws/transcribe");
+      const ws = new WebSocket(cleanedWsBase + "/api/live-transcribe");
       socketRef.current = ws;
 
       ws.onopen = () => {
@@ -225,7 +225,7 @@ export default function App() {
       fd.append("file", file); // FIX: Key matches backend parameter 'file'
 
       // --- ENVIRONMENT VARIABLE USED HERE ---
-      const uploadRes = await fetch(API_BASE_URL.replace(/\/$/, '') + "/api/transcribe-audio/", {
+      const uploadRes = await fetch(API_BASE_URL.replace(/\/$/, '') + "/api/file-transcribe", {
         method: "POST",
         body: fd
       });
