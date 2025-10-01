@@ -20,14 +20,14 @@ export default function App() {
   const [canCopy, setCanCopy] = useState(false);
   
   // NEW STATE: To hold the download URL provided by the server after live session ends
-  const [setDownloadUrl] = useState(null); 
+  const [downloadUrl, setDownloadUrl] = useState(null);
   const [sessionId, setSessionId] = useState(null); 
   
   const [audioChunks, setAudioChunks] = useState([]); 
   const [audioBlob, setAudioBlob] = useState(null); // Used to indicate if recording occurred
   
   const [fileToProcess, setFileToProcess] = useState(null); 
-  const [copyMessage] = useState(null); // Renamed copyMessage to use setState
+  const [copyMessage, setCopyMessage] = useState(null); // Renamed copyMessage to use setState
 
   // Refs for Web Audio API components (Live Transcription)
   const socketRef = useRef(null);
@@ -300,35 +300,22 @@ export default function App() {
       setStatus("Transcription in progress...");
 
       if (!uploadRes.ok) {
-          // If the server returns a JSON error, try to parse it
-          const errorText = await uploadRes.text();
-          throw new Error(`Upload Failed (HTTP ${uploadRes.status}): ${errorText}`);
-      }
-      
-      // 3. Handle the direct ZIP file response
-      const blob = await uploadRes.blob();
-      
-      // Get filename from headers or use a default
-      const contentDisposition = uploadRes.headers.get('Content-Disposition');
-      let filename = Path(file.name).stem + "_transcribed.zip";
-      if (contentDisposition) {
-          const match = contentDisposition.match(/filename="(.+?)"/);
-          if (match && match[1]) {
-              filename = match[1];
-          }
+      const errorText = await uploadRes.text();
+      throw new Error(`Upload Failed (HTTP ${uploadRes.status}): ${errorText}`);
       }
 
-      // Trigger the download of the received ZIP file
-      triggerDownload(blob, filename);
+      // ✅ Parse JSON instead of blob
+      const data = await uploadRes.json();
 
-      // 4. Final status update
-      setAudioBlob(null); // Clear live audio blob 
-      setFinalText("File processed and ZIP downloaded.");
-      setStatus("File Processed and Downloaded");
-      setCanCopy(true); // Allow copying the new status message
+      // Show transcription in text box
+      setFinalText(data.transcription || "");
+      setPartialText("");
+      setStatus("File processed successfully.");
+      setCanCopy(true);
+
     } catch (err) {
       console.error(err);
-      setStatus("Translation Failed");
+      setStatus("Transcription Failed");
       alert(err.message || "File transcription failed.");
     } finally {
       setFileToProcess(null);
