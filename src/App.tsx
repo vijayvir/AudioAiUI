@@ -3,14 +3,18 @@ import ErrorBoundary from './components/organisms/ErrorBoundary';
 import Header from './components/organisms/Header';
 import Hero from './components/organisms/Hero';
 import LoadingSpinner from './components/atoms/LoadingSpinner';
+import { TranscriptionProvider } from './context/TranscriptionProvider';
 
 // Lazy load components for better performance
 const FeatureGrid = lazy(() => import('./components/organisms/FeatureGrid'));
-const DemoSection = lazy(() => import('./components/organisms/DemoSection'));
+const FileProcessingSection = lazy(() => import('./components/organisms/FileProcessingSection'));
+const LiveTranscribeSection = lazy(() => import('./components/organisms/LiveTranscribeSection'));
+const DownloadSection = lazy(() => import('./components/organisms/DownloadSection'));
 
 function App() {
   return (
     <ErrorBoundary>
+      <TranscriptionProvider>
       <div className="min-h-screen bg-gray-900">
         {/* Skip Links for Accessibility */}
         <a 
@@ -30,17 +34,26 @@ function App() {
         <main id="main-content" role="main">
           <Hero />
           <section aria-label="Features">
-            <Suspense fallback={<LoadingSpinner size="lg" text="Loading features..." />}>
+            <Suspense fallback={<LoadingSpinner size="lg" text="Loading features..." />}> 
               <FeatureGrid />
             </Suspense>
           </section>
           <section id="demo-section" aria-label="Interactive Demo">
-            <Suspense fallback={<LoadingSpinner size="lg" text="Loading demo..." />}>
-              <DemoSection />
-            </Suspense>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+              <Suspense fallback={<LoadingSpinner size="lg" text="Loading file section..." />}> 
+                <FileProcessingSection />
+              </Suspense>
+              <Suspense fallback={<LoadingSpinner size="lg" text="Connecting live transcription..." />}> 
+                <LiveTranscribeSection />
+              </Suspense>
+              <Suspense fallback={<LoadingSpinner size="lg" text="Loading downloads..." />}> 
+                <DownloadSection />
+              </Suspense>
+            </div>
           </section>
         </main>
       </div>
+      </TranscriptionProvider>
     </ErrorBoundary>
   );
 }

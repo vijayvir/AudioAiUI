@@ -33,42 +33,73 @@ A React + TypeScript + Vite application implementing the AudioAI marketing and i
 
 ## 2) Architecture Documentation
 
+Documentation standards:
+- Diagrams use Mermaid (supported in GitHub/GitLab renderers).
+- Code paths are precise and relative to repo root.
+- Commands and file paths are in monospace.
+
 ### System Architecture (High-Level)
 ```mermaid
 flowchart LR
   A[User Browser] --> B[React App — Vite + TypeScript + Tailwind CSS]
   B --> C[UI Components — Atomic Design]
+  B --> E[State: Transcription Provider + Hook]
   B -. "future" .-> D[(External APIs / AudioAI Services)]
 ```
 
 ### Component Relationships
 ```mermaid
 flowchart TD
+  App -->|wraps| TranscriptionProvider
   App --> Header
   App --> Hero
   App --> FeatureGrid
-  App --> DemoSection
+  App --> FileProcessingSection
+  App --> LiveTranscribeSection
+  App --> DownloadSection
   App --> ErrorBoundary
 
+  TranscriptionProvider -->|context| useTranscription
   FeatureGrid --> FeatureCard
-  DemoSection --> Button
-  DemoSection --> Icon
+  FileProcessingSection --> Button
+  FileProcessingSection --> Icon
+  LiveTranscribeSection --> Button
+  LiveTranscribeSection --> Icon
+  DownloadSection --> Button
+```
+
+State management (context + reducer):
+```mermaid
+flowchart LR
+  subgraph Context
+    R[Reducer]:::code
+    S[(State)]
+    C[TranscriptionContext]:::code
+    R --> S
+    S --> C
+  end
+  P[TranscriptionProvider] --> C
+  H[useTranscription Hook] --> C
+  classDef code fill:#1f2937,stroke:#4b5563,color:#e5e7eb;
 ```
 
 ### Data Flow
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant D as DemoSection
+  participant FP as FileProcessingSection
+  participant LT as LiveTranscribeSection
   participant UI as UI State
 
-  U->>D: Click Speak / Upload / Live
-  D->>UI: set loading / error / transcription
+  U->>FP: Upload audio file, select language
+  FP->>UI: set loading / error / transcription
+  U->>LT: Start/Stop microphone (live)
+  LT->>UI: update live text, session selection
   UI-->>U: Render spinners, errors, results
 ```
 
 Notes:
-- FeatureGrid and DemoSection are lazy-loaded to improve initial load.
+- FeatureGrid, FileProcessingSection, LiveTranscribeSection are lazy-loaded to improve initial load.
 - Tailwind utilities drive layout and design; custom animations live in src/index.css.
 
 ---
@@ -82,6 +113,10 @@ Root directories of interest:
 - src/components/templates: Reserved for future page layouts
 - src/assets: Static assets (if any)
 - src/types: Shared TypeScript interfaces
+- src/context: App state
+  - `src/context/transcription.ts` (reducer, state, context)
+  - `src/context/TranscriptionProvider.tsx` (provider component)
+  - `src/context/useTranscription.ts` (consumer hook)
 
 Key files:
 - src/App.tsx: App shell, lazy loading, skip links, section composition
@@ -90,34 +125,46 @@ Key files:
 - src/components/organisms/Hero.tsx: Headline, description, CTAs
 - src/components/organisms/FeatureGrid.tsx: Feature cards grid
 - src/components/molecules/FeatureCard.tsx: Individual feature card
-- src/components/organisms/DemoSection.tsx: Interactive demo surface
+- src/components/organisms/FileProcessingSection.tsx: Upload & process files
+- src/components/organisms/LiveTranscribeSection.tsx: Live microphone transcription
+- src/components/organisms/DownloadSection.tsx: Download sessions in various formats
 - src/components/organisms/ErrorBoundary.tsx: Runtime error capture
+- src/context/transcription.ts: State shape, reducer, and context
+- src/context/TranscriptionProvider.tsx: Provider component
+- src/context/useTranscription.ts: Hook for consuming context
 
 Module dependency highlights:
-- App.tsx composes Header, Hero, FeatureGrid, DemoSection inside ErrorBoundary
+- App.tsx composes Header, Hero, FeatureGrid, FileProcessingSection, LiveTranscribeSection, DownloadSection inside ErrorBoundary
 - FeatureGrid maps FeatureCard items
-- DemoSection uses Button, Icon, ErrorMessage, LoadingSpinner
+- The three sections use Button, Icon, ErrorMessage, LoadingSpinner where appropriate
 
 ---
 
 ## 4) API Documentation (if applicable)
 
-Current state: No live API integration. DemoSection simulates async behavior for UX flows.
+Current state: Frontend-integrated API layer with three endpoints. Backend responses are handled through UI state management.
 
-Future integration template:
-- Base URL via Vite env (e.g., VITE_API_BASE_URL)
-- Example fetch wrapper:
-```ts
-async function getTranscription(file: File) {
-  const base = import.meta.env.VITE_API_BASE_URL;
-  const form = new FormData();
-  form.append('file', file);
-  const res = await fetch(`${base}/transcribe`, { method: 'POST', body: form });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-```
-- Auth: Recommend Bearer token via VITE_API_TOKEN with secure handling (never commit).
+Environment:
+- `VITE_API_BASE_URL` (e.g., `http://localhost:8000`)
+- `VITE_WS_BASE_URL` (e.g., `ws://localhost:8000`)
+- `VITE_API_TOKEN` (optional Bearer token)
+
+Endpoints:
+- `POST /file-transcribe`: Upload audio file with `language` field.
+  - Client: `src/services/api/transcription.ts#transcribeFile(file, language)`
+  - Response shape: `{ sessionId, transcript, translation?, status? }`
+- `WebSocket /live-transcribe`: Real-time transcription stream.
+  - Client: `src/services/ws/livetranscribe.ts#LiveTranscribeClient`
+  - Sends binary audio frames (`MediaRecorder` chunks) and receives JSON messages `{ type, text?, sessionId? }`
+  - Media detection: `MediaRecorder.isTypeSupported` guarded via runtime checks for maximum browser compatibility
+- `GET /download-transcription/${session_id}?format=txt|srt|json`
+  - Client: `src/services/api/transcription.ts#downloadTranscription(sessionId, format)`
+  - Triggers browser download via a Blob
+
+Error handling:
+- Centralized in UI components via `ErrorMessage` and try/catch in services.
+- Non-200 responses surface text payloads in thrown Errors.
+  - HTTP client uses `Headers` API and safe JSON/text fallbacks.
 
 ---
 
@@ -139,10 +186,11 @@ Tailwind CSS:
 - Tailwind v4 imported via src/index.css using @import "tailwindcss"; PostCSS pipeline configured.
 
 Environment variables:
-- Create .env.local for local secrets when APIs are added, e.g.:
+- Create `.env.local` for local secrets:
 ```
-VITE_API_BASE_URL=https://api.example.com
-VITE_API_TOKEN=...
+VITE_API_BASE_URL=http://localhost:8000
+VITE_WS_BASE_URL=ws://localhost:8000
+VITE_API_TOKEN=
 ```
 
 ---
@@ -210,6 +258,7 @@ Coverage:
 Common issues:
 - Port 5173 in use: set PORT=5174 or stop existing dev server.
 - Missing styles: ensure src/index.css imports Tailwind and PostCSS is configured.
+- WebSocket auth errors: ensure `VITE_API_TOKEN` matches server expectations; token is passed via query string.
 
 Performance considerations:
 - Keep large components lazy-loaded (already in App.tsx)
@@ -219,11 +268,27 @@ Performance considerations:
 Accessibility:
 - Maintain focus styles and keyboard nav (skip links present)
 - Use semantic elements and ARIA labels where needed
+ - Mobile menu links are placeholders; navigation is prevented until a router is introduced.
 
 Scaling recommendations:
 - Continue Atomic Design discipline as features grow
 - Extract feature-specific state into hooks as complexity increases
 - Introduce API layer and caching (e.g., React Query) when integrating real services
+
+New Components & Architecture (added/refined):
+- `FileProcessingSection`: Upload & process audio, language select, progress & status
+- `LiveTranscribeSection`: Microphone controls, WebSocket live text display, language toggle
+- `DownloadSection`: Session history, format selection, download triggers
+- `TranscriptionProvider` + `useTranscription` + `transcription.ts`: Centralized session & language state management
+- API client utilities: `src/services/api/client.ts`
+
+Usage:
+- The App composes the three sections under a single demo area and wraps everything in `TranscriptionProvider` for shared state.
+
+Changelog highlights:
+- Refactor: Split context into `transcription.ts` (state/reducer/context), `TranscriptionProvider.tsx` (component), `useTranscription.ts` (hook) for compliance with `react-refresh/only-export-components` and clearer separation.
+- Hygiene: Removed committed build artifacts and unused assets; added `build` to .gitignore.
+- Robustness: Safer `MediaRecorder` type detection; improved error typing (`unknown` catch guards); `Headers` API usage in HTTP client.
 
 ---
 

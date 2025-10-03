@@ -102,7 +102,7 @@ const Header: React.FC<HeaderProps> = ({ className = '' }) => {
                   <a
                     href={item.href}
                     className="block text-gray-300 hover:text-white transition-colors duration-200 py-2"
-                    onClick={() => setIsMobileMenuOpen(false)}
+                    onClick={(e) => { e.preventDefault(); setIsMobileMenuOpen(false); }}
                   >
                     {item.label}
                   </a>
@@ -113,7 +113,7 @@ const Header: React.FC<HeaderProps> = ({ className = '' }) => {
                           key={dropdownItem.label}
                           href={dropdownItem.href}
                           className="block text-sm text-gray-400 hover:text-gray-300 transition-colors duration-200 py-1"
-                          onClick={() => setIsMobileMenuOpen(false)}
+                          onClick={(e) => { e.preventDefault(); setIsMobileMenuOpen(false); }}
                         >
                           {dropdownItem.label}
                         </a>
