@@ -362,9 +362,9 @@ export default function App() {
             disabled={isRecording}
           >
             <option value="en-US">English</option>
-            <option value="es-ES">Spanish</option>
-            <option value="fr-FR">French</option>
-            <option value="hi-IN">Hindi</option>
+            // <option value="es-ES">Spanish</option>
+            // <option value="fr-FR">French</option>
+            // <option value="hi-IN">Hindi</option>
           </select>
 
           {/* Live Recording Controls */}
