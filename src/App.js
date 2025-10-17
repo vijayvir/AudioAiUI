@@ -628,7 +628,7 @@ const downloadBlob = (blob, filename) => {
                 onMouseEnter={(e) => (e.target.style.color = "#fff")}
                 onMouseLeave={(e) => (e.target.style.color = "#ccc")}
               >
-                Export ▼
+                Export
               </span>
 
                 {showExportMenu && (
