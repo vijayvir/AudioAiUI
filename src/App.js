@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import jsPDF from "jspdf";
-import Sentiment from "sentiment";
 import vader from "vader-sentiment";
 import "./App.css";
 
@@ -23,6 +22,9 @@ export default function App() {
   const [partialText, setPartialText] = useState("");
   const [canCopy, setCanCopy] = useState(false);
   const [timestampedLines, setTimestampedLines] = useState([]);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [toneCounts, setToneCounts] = useState({ positive: 0, neutral: 0, negative: 0 });
+const [tonePercentages, setTonePercentages] = useState({ positive: 0, neutral: 0, negative: 0 });
   
   // NEW STATE: To hold the download URL provided by the server after live session ends
   const [downloadUrl, setDownloadUrl] = useState(null);
@@ -175,6 +177,10 @@ export default function App() {
             setPartialText(text);
           }
         } catch (e) {
+           const tone = analyzeTone(text);
+          const updated = updateToneCounts(tone, toneCounts);
+          setToneCounts(updated);
+          setTonePercentages(getTonePercentages(updated));
           console.error("Error parsing WebSocket message:", e);
         }
       };
@@ -331,50 +337,33 @@ export default function App() {
     }
   };
 
-//  const analyzeTone = (text) => {
-//   if (!text) return "No text";
-
-//   const intensity = vader.SentimentIntensityAnalyzer.polarity_scores(text);
-//   // intensity example: {neg: 0.0, neu: 0.5, pos: 0.5, compound: 0.6}
-
-//   if (intensity.compound >= 0.05) return "Positive 😊";
-//   if (intensity.compound <= -0.05) return "Negative 😞";
-//   return "Neutral 😐";
-// };
-
-// function TranscriptTone({ finalText }) {
-//   const tone = analyzeTone(finalText);
-
-//   return (
-//     <div style={{ marginTop: "10px", fontWeight: "bold" }}>
-//       Tone Analysis: {tone}
-//     </div>
-//   );
-// }
-
 const analyzeTone = (text) => {
-  if (!text) return "No text yet";
-  const intensity = vader.SentimentIntensityAnalyzer.polarity_scores(text);
-  if (intensity.compound >= 0.05) return "Positive 😊";
-  if (intensity.compound <= -0.05) return "Negative 😞";
-  return "Neutral 😐";
+  const result = vader.SentimentIntensityAnalyzer.polarity_scores(text);
+  const { compound } = result;
+
+  let tone = 'Neutral';
+  if (compound > 0.05) tone = 'Positive';
+  else if (compound < -0.05) tone = 'Negative';
+
+  return tone;
 };
 
-const toneColors = {
-  Positive: { bg: "#d4edda", color: "#155724" },
-  Negative: { bg: "#f8d7da", color: "#721c24" },
-  Neutral: { bg: "#fff3cd", color: "#856404" },
-  Default: { bg: "#e2e3e5", color: "#383d41" },
+const updateToneCounts = (tone, currentCounts) => {
+  const updated = { ...currentCounts };
+  if (tone === 'Positive') updated.positive += 1;
+  else if (tone === 'Negative') updated.negative += 1;
+  else updated.neutral += 1;
+  return updated;
 };
 
-const tone = analyzeTone(finalText);
-const getToneStyle = () => {
-  if (tone.includes("Positive")) return toneColors.Positive;
-  if (tone.includes("Negative")) return toneColors.Negative;
-  if (tone.includes("Neutral")) return toneColors.Neutral;
-  return toneColors.Default;
+const getTonePercentages = (counts) => {
+  const total = counts.positive + counts.neutral + counts.negative || 1;
+  return {
+    positive: Math.round((counts.positive / total) * 100),
+    neutral: Math.round((counts.neutral / total) * 100),
+    negative: Math.round((counts.negative / total) * 100),
+  };
 };
-const toneStyle = getToneStyle();
 
 
   // ---- UI helpers ----
@@ -584,40 +573,27 @@ const downloadBlob = (blob, filename) => {
         <div className="footer">
           <div
             style={{
-              marginTop: 16,
-              padding: "6px 12px",
-              borderRadius: 16,
-              backgroundColor: toneStyle.bg,
-              color: toneStyle.color,
-              fontWeight: "600",
-              fontSize: 14,
-              textAlign: "center",
-              userSelect: "none",
-              boxShadow: `0 0 4px ${toneStyle.color}55`,
-              transition: "all 0.3s ease",
+              marginTop: 20,
+              padding: "8px 14px",
+              borderRadius: "6px",
+              backgroundColor: "#222",
+              color: "#fff",
+              fontSize: "14px",
               width: "fit-content",
-              animation: "pulse 2s infinite",
-              // ✅ Aligned to the left
-              marginLeft: 0,
-              marginRight: "auto",
+              margin: "0 auto",
+              textAlign: "center",
+              display: "flex",
+              gap: "16px",
+              alignItems: "center",
+              justifyContent: "center",
+              flexWrap: "wrap",
             }}
           >
-            Tone: {tone}
+            🎯 Tone: 
+            <span style={{ color: "#4caf50" }}>😊 Positive: {tonePercentages.positive}%</span>
+            <span style={{ color: "#ffc107" }}>😐 Neutral: {tonePercentages.neutral}%</span>
+            <span style={{ color: "#f44336" }}>😠 Negative: {tonePercentages.negative}%</span>
           </div>
-
-          <style>
-            {`
-              @keyframes pulse {
-                0%, 100% {
-                  box-shadow: 0 0 4px ${toneStyle.color}55;
-                }
-                50% {
-                  box-shadow: 0 0 8px ${toneStyle.color}88;
-                }
-              }
-            `}
-          </style>
-
 
           <button className="link" onClick={onCopy} disabled={!canCopy}>
           Copy Transcript
@@ -631,26 +607,77 @@ const downloadBlob = (blob, filename) => {
           >
             Download
           </button>
+          
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
 
-          <select
-            onChange={async (e) => {
-              const format = e.target.value;
-              if (!format) return;
 
-              if (format === "txt") exportAsTxt(finalText);
-              else if (format === "docx") await exportAsDocx(finalText);
-              else if (format === "pdf") await exportAsPdf(finalText);
-              else if (format === "srt") exportAsSrt(finalText);
+                {/* Export dropdown text trigger */}
+                <div style={{ position: "relative" }}>
+                  <span
+                onClick={() => setShowExportMenu((prev) => !prev)}
+                style={{
+                  cursor: "pointer",
+                  color: "#b9b7b7ff",
+                  textDecoration: "none",
+                  fontSize: "13px",
+                  fontWeight: "500",
+                  padding: "6px 10px",
+                  display: "inline-block",
+                  transition: "color 0.2s ease-in-out",
+                }}
+                onMouseEnter={(e) => (e.target.style.color = "#fff")}
+                onMouseLeave={(e) => (e.target.style.color = "#ccc")}
+              >
+                Export ▼
+              </span>
 
-              e.target.selectedIndex = 0; // reset dropdown
-            }}
-          >
-            <option value="">Export transcript as...</option>
-            <option value="txt">.txt</option>
-            <option value="docx">.docx</option>
-            <option value="pdf">.pdf</option>
-            <option value="srt">.srt (subtitle)</option>
-          </select>
+                {showExportMenu && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "36px", // this ensures dropdown appears directly below
+                      left: 0,
+                      backgroundColor: "#fff",
+                      border: "1px solid #ccc",
+                      borderRadius: 4,
+                      boxShadow: "0 1px 5px rgba(0, 0, 0, 0.1)",
+                      zIndex: 9999,
+                      minWidth: "120px",
+                      fontSize: "13px",
+                    }}
+                  >
+                    {[
+                      { label: ".txt", value: "txt" },
+                      { label: ".docx", value: "docx" },
+                      { label: ".pdf", value: "pdf" },
+                      { label: ".srt", value: "srt" },
+                    ].map((option) => (
+                      <div
+                        key={option.value}
+                        onClick={async () => {
+                          setShowExportMenu(false);
+                          if (option.value === "txt") exportAsTxt(finalText);
+                          else if (option.value === "docx") await exportAsDocx(finalText);
+                          else if (option.value === "pdf") await exportAsPdf(finalText);
+                          else if (option.value === "srt") exportAsSrt(finalText);
+                        }}
+                        style={{
+                          padding: "6px 10px",
+                          cursor: "pointer",
+                          color: "#333",
+                          backgroundColor: "#fff",
+                          whiteSpace: "nowrap",
+                        }}
+                        onMouseEnter={(e) => (e.target.style.backgroundColor = "#f0f0f0")}
+                        onMouseLeave={(e) => (e.target.style.backgroundColor = "#fff")}
+                      >
+                        {option.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
         </div>
       </div>
     </div>
