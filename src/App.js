@@ -1,4 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Document, Packer, Paragraph, TextRun } from "docx";
+import jsPDF from "jspdf";
+import Sentiment from "sentiment";
+import vader from "vader-sentiment";
 import "./App.css";
 
 // Note: JSZip is no longer strictly necessary since the server is handling the zipping, 
@@ -18,6 +22,7 @@ export default function App() {
   const [finalText, setFinalText] = useState("");
   const [partialText, setPartialText] = useState("");
   const [canCopy, setCanCopy] = useState(false);
+  const [timestampedLines, setTimestampedLines] = useState([]);
   
   // NEW STATE: To hold the download URL provided by the server after live session ends
   const [downloadUrl, setDownloadUrl] = useState(null);
@@ -159,7 +164,11 @@ export default function App() {
           if (!text) return;
 
           if (data.type === "final") {
-            setFinalText((prev) => (prev + text + " ").replace(/\s+/g, " "));
+            const now = new Date();
+            const timestamp = now.toLocaleString();
+            const textWithTimestamp = `[${timestamp}] ${text}`;
+            // setFinalText((prev) => (prev + textWithTimestamp + " ").replace(/\s+/g, " "));
+            setFinalText((prev) => prev + "\n" + textWithTimestamp);
             setPartialText("");
             setCanCopy(true);
           } else if (data.type === "partial") {
@@ -322,6 +331,52 @@ export default function App() {
     }
   };
 
+//  const analyzeTone = (text) => {
+//   if (!text) return "No text";
+
+//   const intensity = vader.SentimentIntensityAnalyzer.polarity_scores(text);
+//   // intensity example: {neg: 0.0, neu: 0.5, pos: 0.5, compound: 0.6}
+
+//   if (intensity.compound >= 0.05) return "Positive 😊";
+//   if (intensity.compound <= -0.05) return "Negative 😞";
+//   return "Neutral 😐";
+// };
+
+// function TranscriptTone({ finalText }) {
+//   const tone = analyzeTone(finalText);
+
+//   return (
+//     <div style={{ marginTop: "10px", fontWeight: "bold" }}>
+//       Tone Analysis: {tone}
+//     </div>
+//   );
+// }
+
+const analyzeTone = (text) => {
+  if (!text) return "No text yet";
+  const intensity = vader.SentimentIntensityAnalyzer.polarity_scores(text);
+  if (intensity.compound >= 0.05) return "Positive 😊";
+  if (intensity.compound <= -0.05) return "Negative 😞";
+  return "Neutral 😐";
+};
+
+const toneColors = {
+  Positive: { bg: "#d4edda", color: "#155724" },
+  Negative: { bg: "#f8d7da", color: "#721c24" },
+  Neutral: { bg: "#fff3cd", color: "#856404" },
+  Default: { bg: "#e2e3e5", color: "#383d41" },
+};
+
+const tone = analyzeTone(finalText);
+const getToneStyle = () => {
+  if (tone.includes("Positive")) return toneColors.Positive;
+  if (tone.includes("Negative")) return toneColors.Negative;
+  if (tone.includes("Neutral")) return toneColors.Neutral;
+  return toneColors.Default;
+};
+const toneStyle = getToneStyle();
+
+
   // ---- UI helpers ----
   const onCopy = async () => {
     if (!canCopy) return;
@@ -337,6 +392,61 @@ export default function App() {
   const Path = {
     stem: (name) => name.split('.').slice(0, -1).join('.'),
   }
+
+ const exportAsTxt = (text) => {
+  const blob = new Blob([text], { type: "text/plain" });
+  downloadBlob(blob, "transcript.txt");
+};
+
+const exportAsDocx = async (text) => {
+  const { Document, Packer, Paragraph, TextRun } = await import("docx");
+  const doc = new Document({
+    sections: [{
+      children: text.split("\n").map(line =>
+        new Paragraph({ children: [new TextRun(line)] })
+      )
+    }]
+  });
+  const blob = await Packer.toBlob(doc);
+  downloadBlob(blob, "transcript.docx");
+};
+
+const exportAsPdf = async (text) => {
+  const { default: jsPDF } = await import("jspdf");
+  const doc = new jsPDF();
+  let y = 10;
+  text.split("\n").forEach(line => {
+    doc.text(line, 10, y);
+    y += 8;
+    if (y > 280) {
+      doc.addPage();
+      y = 10;
+    }
+  });
+  doc.save("transcript.pdf");
+};
+
+const exportAsSrt = (text) => {
+  const lines = text.split("\n").filter(Boolean);
+  const srt = lines.map((line, i) => {
+    const start = new Date(i * 4000).toISOString().substr(11, 8) + ",000";
+    const end = new Date((i + 1) * 4000).toISOString().substr(11, 8) + ",000";
+    return `${i + 1}\n${start} --> ${end}\n${line}\n`;
+  }).join("\n");
+
+  const blob = new Blob([srt], { type: "text/plain" });
+  downloadBlob(blob, "transcript.srt");
+};
+
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 
   // --- Render logic ---
 
@@ -377,6 +487,51 @@ export default function App() {
               ⏹ Stop
             </button>
           )}
+
+         <div style={{
+              background: "#ffffff",
+              border: "1px solid #ddd",
+              borderRadius: "6px",
+              padding: "12px",
+              maxHeight: "180px",  
+              overflowY: "auto",
+              fontFamily: "'Segoe UI', sans-serif",
+              fontSize: "13px",    
+              lineHeight: "1.4",
+              boxShadow: "0 1px 4px rgba(0, 0, 0, 0.05)",
+              width: "100%",        
+              maxWidth: "500px",   
+            }}>
+              {finalText.split("\n").map((line, index) => {
+                const match = line.match(/^\[(.*?)\]\s(.*)$/);
+                const time = match?.[1] ?? "";
+                const content = match?.[2] ?? line;
+
+                return (
+                  <div key={index} style={{
+                    marginBottom: "8px",
+                    padding: "6px 8px",
+                    background: "#f5f5f5",
+                    borderRadius: "4px"
+                  }}>
+                    <span style={{
+                      color: "#888",
+                      fontSize: "11px",
+                      display: "block",
+                      marginBottom: "2px"
+                    }}>
+                      {time}
+                    </span>
+                    <span style={{
+                      color: "#222"
+                    }}>
+                      {content}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
 
           <div className="status">Status: {status}</div>
         </div>
@@ -427,6 +582,43 @@ export default function App() {
 
         {/* Footer actions */}
         <div className="footer">
+          <div
+            style={{
+              marginTop: 16,
+              padding: "6px 12px",
+              borderRadius: 16,
+              backgroundColor: toneStyle.bg,
+              color: toneStyle.color,
+              fontWeight: "600",
+              fontSize: 14,
+              textAlign: "center",
+              userSelect: "none",
+              boxShadow: `0 0 4px ${toneStyle.color}55`,
+              transition: "all 0.3s ease",
+              width: "fit-content",
+              animation: "pulse 2s infinite",
+              // ✅ Aligned to the left
+              marginLeft: 0,
+              marginRight: "auto",
+            }}
+          >
+            Tone: {tone}
+          </div>
+
+          <style>
+            {`
+              @keyframes pulse {
+                0%, 100% {
+                  box-shadow: 0 0 4px ${toneStyle.color}55;
+                }
+                50% {
+                  box-shadow: 0 0 8px ${toneStyle.color}88;
+                }
+              }
+            `}
+          </style>
+
+
           <button className="link" onClick={onCopy} disabled={!canCopy}>
           Copy Transcript
           </button>
@@ -439,6 +631,26 @@ export default function App() {
           >
             Download
           </button>
+
+          <select
+            onChange={async (e) => {
+              const format = e.target.value;
+              if (!format) return;
+
+              if (format === "txt") exportAsTxt(finalText);
+              else if (format === "docx") await exportAsDocx(finalText);
+              else if (format === "pdf") await exportAsPdf(finalText);
+              else if (format === "srt") exportAsSrt(finalText);
+
+              e.target.selectedIndex = 0; // reset dropdown
+            }}
+          >
+            <option value="">Export transcript as...</option>
+            <option value="txt">.txt</option>
+            <option value="docx">.docx</option>
+            <option value="pdf">.pdf</option>
+            <option value="srt">.srt (subtitle)</option>
+          </select>
         </div>
       </div>
     </div>
