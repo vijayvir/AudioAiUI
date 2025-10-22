@@ -136,7 +136,6 @@ body, html, #root {
 
 /* Buttons */
 .file-btn, .transcribe {
-  width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -170,3 +169,59 @@ body, html, #root {
   cursor: pointer;
 }
 .link:hover { color: var(--text); }
+
+/* --- Sentiment Box Styles (Recommended Addition) --- */
+
+.sentiment-box {
+  background: var(--muted);
+  border-radius: 10px;
+  padding: 15px;
+  margin: 20px auto; /* Center it */
+  text-align: center;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.sentiment-title {
+  font-size: 1.1em;
+  font-weight: 700;
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: var(--accent1);
+}
+
+.sentiment-label {
+  font-size: 1em;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.sentiment-label.positive {
+  color: #4caf50; /* Standard green */
+}
+
+.sentiment-label.negative {
+  color: var(--danger);
+}
+
+.sentiment-label.neutral {
+  color: var(--sub);
+}
+
+.sentiment-distribution {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  font-size: 0.85em;
+}
+
+.sentiment-distribution span {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #101016; /* Darker background for distribution pills */
+}
+
+/* Specific distribution colors */
+.sentiment-distribution .sentiment-positive { color: #4caf50; }
+.sentiment-distribution .sentiment-neutral { color: #ffc107; }
+.sentiment-distribution .sentiment-negative { color: var(--danger); }
