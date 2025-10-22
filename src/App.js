@@ -1,186 +1,151 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Document, Packer, Paragraph, TextRun } from "docx";
-import jsPDF from "jspdf";
-import vader from "vader-sentiment";
+import React, { useRef, useState } from "react";
 import "./App.css";
 
-// Note: JSZip is no longer strictly necessary since the server is handling the zipping, 
-// but we keep the import in case of future use.
-// import JSZip from "jszip"; 
-
 // --- ENVIRONMENT VARIABLES ---
-// Ensure your .env file is loaded correctly by your React setup (e.g., CRA or Vite)
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000";
 const WS_BASE_URL = process.env.REACT_APP_WEBSOCKET_URL || "ws://127.0.0.1:8000/ws";
+const API_URL = API_BASE_URL.replace(/\/$/, "") + "/api"; // Helper for download URLs
 
 export default function App() {
   const [tab, setTab] = useState("stt");
-  const [lang, setLang] = useState("en-US"); 
+  const [lang, setLang] = useState("en-US");
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState("Idle");
   const [finalText, setFinalText] = useState("");
   const [partialText, setPartialText] = useState("");
   const [canCopy, setCanCopy] = useState(false);
-  const [timestampedLines, setTimestampedLines] = useState([]);
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const [toneCounts, setToneCounts] = useState({ positive: 0, neutral: 0, negative: 0 });
-const [tonePercentages, setTonePercentages] = useState({ positive: 0, neutral: 0, negative: 0 });
-  
-  // NEW STATE: To hold the download URL provided by the server after live session ends
-  const [downloadUrl, setDownloadUrl] = useState(null);
-  const [sessionId, setSessionId] = useState(null); 
-  
-  const [audioChunks, setAudioChunks] = useState([]); 
-  const [audioBlob, setAudioBlob] = useState(null); // Used to indicate if recording occurred
-  
-  const [fileToProcess, setFileToProcess] = useState(null); 
-  const [copyMessage, setCopyMessage] = useState(null); // Renamed copyMessage to use setState
+  const [downloadFormat, setDownloadFormat] = useState("txt"); 
 
-  // Refs for Web Audio API components (Live Transcription)
+  const [audioChunks, setAudioChunks] = useState([]);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [fileToProcess, setFileToProcess] = useState(null);
+
+  // State for Backend Download Integration
+  const [liveSessionId, setLiveSessionId] = useState(null); 
+  const [fileId, setFileId] = useState(null); 
+  const [lastMode, setLastMode] = useState(null); 
+
+  // 🧠 Sentiment state
+  const [overallSentiment, setOverallSentiment] = useState({
+    distribution: { positive: "0%", neutral: "0%", negative: "0%" },
+    label: "Neutral", 
+    score: 0
+  });
+
+  // Refs for Web Audio API
   const socketRef = useRef(null);
-  const streamRef = useRef(null); 
-  const audioContextRef = useRef(null); 
-  const processorRef = useRef(null); 
-  const sourceRef = useRef(null); 
-  const mediaRecorderRef = useRef(null); 
+  const streamRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const processorRef = useRef(null);
+  const sourceRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
 
-  // Build display string
+  // FIX: displayText is correctly structured to show FINAL + PARTIAL
   const displayText =
-    (finalText ? finalText.trimEnd() + " " : "") +
-    (partialText ? partialText : "");
+    (finalText ? finalText.trimEnd() : "") +
+    (partialText ? " " + partialText : "");
 
-  useEffect(() => {}, []);
-
-  // Utility to handle generic download of a blob
-  const triggerDownload = (blob, filename) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  // Helper for CSS class mapping
+  const getSentimentClass = (label) => {
+    const lower = label?.toLowerCase() || "";
+    if (lower.includes("pos")) return "positive";
+    if (lower.includes("neg")) return "negative";
+    return "neutral";
   };
-
-  // ---- LIVE TRANSCRIBE (USING WEB AUDIO API for 16kHz PCM) ----
+  
+  // ---- LIVE RECORDING ----
   const startLive = async () => {
     try {
-      // Clear previous state
+      // FIX: Resetting text and IDs before starting
       setStatus("Requesting microphone…");
       setFinalText("");
       setPartialText("");
       setCanCopy(false);
       setAudioBlob(null);
       setFileToProcess(null);
-      setDownloadUrl(null); // Clear previous download URL
-      setSessionId(null); // Clear previous session ID
+      setFileId(null);
+      setLiveSessionId(null);
+      setLastMode("live"); // Set mode right away
 
-      // Request media stream
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-          channelCount: 1, 
-          sampleRate: 16000 
-        } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, sampleRate: 16000 },
       });
       streamRef.current = stream;
 
-      // WebSocket connection
       setStatus("Connecting to Local Backend…");
-      
-      // Construct the URL to match the full FastAPI path: /api/live-transcribe
-      const cleanedWsBase = WS_BASE_URL.replace(/\/$/, '').replace('/ws', '');
+      const cleanedWsBase = WS_BASE_URL.replace(/\/$/, "").replace("/ws", "");
       const ws = new WebSocket(cleanedWsBase + "/api/live-transcribe");
       socketRef.current = ws;
 
       ws.onopen = () => {
-        setStatus("Connected, streaming raw audio…");
+        setStatus("Connected, streaming audio…");
         
-        // 1. Setup Web Audio API to capture and process raw data
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+          sampleRate: 16000,
+        });
         audioContextRef.current = audioCtx;
-        
         const source = audioCtx.createMediaStreamSource(stream);
         sourceRef.current = source;
-        
-        const processor = audioCtx.createScriptProcessor(4096, 1, 1); 
+        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
         processorRef.current = processor;
 
         source.connect(processor);
         processor.connect(audioCtx.destination);
 
-        // 2. Convert Float32 data to Int16 PCM for Vosk
         processor.onaudioprocess = (e) => {
           const float32 = e.inputBuffer.getChannelData(0);
-          
           let buffer = new ArrayBuffer(float32.length * 2);
           let view = new DataView(buffer);
           for (let i = 0; i < float32.length; i++) {
             let s = Math.max(-1, Math.min(1, float32[i]));
-            view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true); 
+            view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
           }
-          
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(buffer);
-          }
+          if (ws.readyState === WebSocket.OPEN) ws.send(buffer);
         };
-        
-        // 3. Setup MediaRecorder for saving the audio to a file (webm chunks)
+
         const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
         mediaRecorderRef.current = mr;
-        
         mr.ondataavailable = (evt) => {
-            if (evt.data.size > 0) {
-                setAudioChunks((prev) => [...prev, evt.data]);
-            }
+          if (evt.data.size > 0) setAudioChunks((prev) => [...prev, evt.data]);
         };
-
         mr.onstop = () => {
-            // This is primarily for the audioBlob state indicator, 
-            // the server-side recording is handled by the WebSocket messages.
-            const blob = new Blob(audioChunks, { type: "audio/webm" });
-            setAudioBlob(blob);
-            setAudioChunks([]); 
+          const blob = new Blob(audioChunks, { type: "audio/webm" });
+          setAudioBlob(blob);
+          setAudioChunks([]);
         };
-
-        mr.start(1000); 
+        mr.start(1000);
       };
 
       ws.onmessage = (msg) => {
         try {
           const data = JSON.parse(msg.data);
-          const text = data?.text || "";
 
-          // Handle session start and end messages from the server
-          if (data.type === "session_start" && data.session_id) {
-              setSessionId(data.session_id);
-              return;
+          // CAPTURE SESSION ID
+          if (data.session_id) {
+            setLiveSessionId(data.session_id);
           }
           
-          if (data.type === "session_end" && data.download_url) {
-              setDownloadUrl(data.download_url); // Store the URL for download
-              setStatus("Session Ended. Transcript and audio saved on server.");
-              return;
-          }
-
-          if (!text) return;
-
-          if (data.type === "final") {
-            const now = new Date();
-            const timestamp = now.toLocaleString();
-            const textWithTimestamp = `[${timestamp}] ${text}`;
-            // setFinalText((prev) => (prev + textWithTimestamp + " ").replace(/\s+/g, " "));
-            setFinalText((prev) => prev + "\n" + textWithTimestamp);
+          if (data.type === "final" && data.text) {
+             // FIX: When a 'final' segment arrives, append it to finalText and clear partialText
+            setFinalText(prev => (prev.trimEnd() + " " + data.text).trim());
             setPartialText("");
+            
+            if (data.sentiment) setOverallSentiment(data.sentiment); 
+
+          } else if (data.type === "partial" && data.text) {
+            // FIX: Only update the partial text state
+            setPartialText(data.text);
+            if (data.sentiment) setOverallSentiment(data.sentiment);
+
+          } else if (data.type === "session_end" && data.final_text) {
+            // FIX: Handle final overall result sent by backend after 'stop'
+            setFinalText(data.final_text.trim());
+            setPartialText("");
+            setStatus("✅ Final transcription ready");
             setCanCopy(true);
-          } else if (data.type === "partial") {
-            setPartialText(text);
+            if (data.overall_sentiment) setOverallSentiment(data.overall_sentiment);
           }
         } catch (e) {
-           const tone = analyzeTone(text);
-          const updated = updateToneCounts(tone, toneCounts);
-          setToneCounts(updated);
-          setTonePercentages(getTonePercentages(updated));
           console.error("Error parsing WebSocket message:", e);
         }
       };
@@ -188,95 +153,77 @@ const [tonePercentages, setTonePercentages] = useState({ positive: 0, neutral: 0
       ws.onerror = (e) => {
         console.error("WebSocket error", e);
         setStatus("Error");
-        stopLive();
+        stopLive(true); // Stop cleanup immediately on error
       };
       
+      // FIX: ws.onclose should not immediately run all stopLive cleanup
+      // The backend should send 'session_end' first, then close connection.
       ws.onclose = () => {
-        setStatus("Closed");
-        stopLive(); 
+        // If we haven't already finished, wait for final results or assume closed
+        if (isRecording) {
+            setStatus("Waiting for final transcription...");
+        } else {
+            setStatus("Closed");
+        }
       };
 
       setIsRecording(true);
       setAudioChunks([]);
     } catch (err) {
       console.error("Mic/Connection error:", err);
-      alert("Microphone permission or connection failed. See console for details.");
+      alert("Microphone permission or connection failed.");
       setStatus("Error");
     }
   };
 
-  const stopLive = () => {
+  const stopLive = (isError = false) => {
+    // FIX: Send a message to the backend to process the final transcription
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+        socketRef.current.send(JSON.stringify({ text: "stop" }));
+        setStatus("Processing final transcript...");
+        // Do NOT close the socket here; let the backend send the final message first.
+    }
+    
+    // Cleanup Web Audio API and Mic stream
     try {
-      // 1. Disconnect Web Audio API components
       if (processorRef.current) processorRef.current.disconnect();
       if (sourceRef.current) sourceRef.current.disconnect();
       if (audioContextRef.current) audioContextRef.current.close();
       
-      // 2. Stop MediaRecorder 
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
         mediaRecorderRef.current.stop();
       }
       
-      // 3. Stop mic stream
-      if (streamRef.current) {
+      if (streamRef.current)
         streamRef.current.getTracks().forEach((t) => t.stop());
-      }
-      
-      // 4. Close WebSocket
-      // The server will handle sending the session_end and download URL on close
-      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-        socketRef.current.close();
-      }
+        
     } finally {
+      // Reset refs
       streamRef.current = null;
       audioContextRef.current = null;
       processorRef.current = null;
       sourceRef.current = null;
       mediaRecorderRef.current = null;
-      socketRef.current = null;
-
+      
+      // Reset status if it was an error, otherwise keep "Processing" status 
+      // until the final WS message comes in.
+      if (isError) setStatus("Error");
+      
       setIsRecording(false);
-      setPartialText("");
-    }
-  };
-  
-  // ---- LIVE SESSION DOWNLOAD (NEW FUNCTION) ----
-  const onDownloadSession = async () => {
-    if (!sessionId) {
-      alert("No active session to download.");
-      return;
-    }
-
-    setStatus("Downloading session files...");
-
-    try {
-      const response = await fetch(
-        API_BASE_URL.replace(/\/$/, '') + `/api/download-transcription/${sessionId}`
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Download Failed (HTTP ${response.status}): ${errorText}`);
-      }
-
-      const blob = await response.blob();
-      triggerDownload(blob, `session_${sessionId}.zip`);
-      setStatus("Download Complete.");
-    } catch (err) {
-      console.error("Download error:", err);
-      setStatus("Download Failed");
-      alert(err.message || "Failed to download session files from server.");
+      // Do NOT clear text here; we need to wait for the final message.
     }
   };
 
-
-  // ---- FILE SELECTION (STEP 1) ----
+  // ---- FILE UPLOAD & PROCESS ----
   const onPickFile = (e) => {
+    // Ensure live cleanup happens before starting file process
+    if (isRecording) stopLive(true); 
+
     const file = e.target.files?.[0];
-    
-    stopLive(); 
     setAudioBlob(null);
-    setDownloadUrl(null); // Ensure live download state is clear
+    setLiveSessionId(null); 
+    setFileId(null);         
+    setLastMode("file"); // Default to file mode for upload flow
 
     if (file) {
       setFileToProcess(file);
@@ -287,157 +234,119 @@ const [tonePercentages, setTonePercentages] = useState({ positive: 0, neutral: 0
     } else {
       setFileToProcess(null);
       setStatus("Idle");
+      setLastMode(null);
     }
-    
     e.target.value = "";
   };
 
-  // ---- FILE UPLOAD & TRANSCRIBE (STEP 2 - Updated for direct ZIP download) ----
   const onProcessFile = async () => {
     if (!fileToProcess) return;
-
     const file = fileToProcess;
+    
+    // Reset output text
+    setFinalText("");
+    setPartialText("");
 
     try {
-      // 1. Set status for upload
-      setStatus(`Uploading file: ${file.name}...`);
-      
+      setStatus(`Uploading: ${file.name}...`);
       const fd = new FormData();
       fd.append("file", file);
 
-      // --- ENVIRONMENT VARIABLE USED HERE ---
-      const uploadRes = await fetch(API_BASE_URL.replace(/\/$/, '') + "/api/file-transcribe", {
-        method: "POST",
-        body: fd
-      });
+      const res = await fetch(
+        API_URL + "/file-transcribe",
+        { method: "POST", body: fd }
+      );
 
-      // 2. Status update during transcription
-      setStatus("Transcription in progress...");
+      setStatus("Processing...");
+      if (!res.ok) throw new Error(await res.text());
 
-      if (!uploadRes.ok) {
-      const errorText = await uploadRes.text();
-      throw new Error(`Upload Failed (HTTP ${uploadRes.status}): ${errorText}`);
+      const data = await res.json();
+      const transcription = data?.transcription;
+      const text = transcription?.text || transcription || "";
+      const sentiment = data?.overall_sentiment || null;
+      
+      // CAPTURE FILE ID AND MODE
+      if (data.file_id) {
+          setFileId(data.file_id);
+          setLastMode("file");
+      }
+      
+      if (sentiment) {
+        setOverallSentiment({
+          label: sentiment.label || "Neutral",
+          score: sentiment.score || 0,
+          distribution: sentiment.distribution || {
+            positive: "0%", neutral: "0%", negative: "0%",
+          },
+        });
       }
 
-      // ✅ Parse JSON instead of blob
-      const data = await uploadRes.json();
-
-      // Show transcription in text box
-      setFinalText(data.transcription || "");
-      setPartialText("");
-      setStatus("File processed successfully.");
-      setCanCopy(true);
+      setAudioBlob(file);
+      setFinalText(text);
+      setCanCopy(!!text);
+      setStatus("Complete");
 
     } catch (err) {
       console.error(err);
-      setStatus("Transcription Failed");
-      alert(err.message || "File transcription failed.");
+      alert("Transcription failed: " + err.message);
+      setStatus("Failed");
     } finally {
       setFileToProcess(null);
     }
   };
 
-const analyzeTone = (text) => {
-  const result = vader.SentimentIntensityAnalyzer.polarity_scores(text);
-  const { compound } = result;
-
-  let tone = 'Neutral';
-  if (compound > 0.05) tone = 'Positive';
-  else if (compound < -0.05) tone = 'Negative';
-
-  return tone;
-};
-
-const updateToneCounts = (tone, currentCounts) => {
-  const updated = { ...currentCounts };
-  if (tone === 'Positive') updated.positive += 1;
-  else if (tone === 'Negative') updated.negative += 1;
-  else updated.neutral += 1;
-  return updated;
-};
-
-const getTonePercentages = (counts) => {
-  const total = counts.positive + counts.neutral + counts.negative || 1;
-  return {
-    positive: Math.round((counts.positive / total) * 100),
-    neutral: Math.round((counts.neutral / total) * 100),
-    negative: Math.round((counts.negative / total) * 100),
-  };
-};
-
-
-  // ---- UI helpers ----
+  // ---- COPY ----
   const onCopy = async () => {
-    if (!canCopy) return;
-    try {
-      await navigator.clipboard.writeText(displayText.trim());
-      alert("Transcript copied to clipboard!");
-    } catch (error) {
-        console.error("Copy failed:", error);
-        alert("Failed to copy text.");
-    }
+    if (!canCopy || !finalText.trim()) return;
+    await navigator.clipboard.writeText(finalText.trim());
+    alert("Copied to clipboard!");
   };
 
-  const Path = {
-    stem: (name) => name.split('.').slice(0, -1).join('.'),
-  }
-
- const exportAsTxt = (text) => {
-  const blob = new Blob([text], { type: "text/plain" });
-  downloadBlob(blob, "transcript.txt");
-};
-
-const exportAsDocx = async (text) => {
-  const { Document, Packer, Paragraph, TextRun } = await import("docx");
-  const doc = new Document({
-    sections: [{
-      children: text.split("\n").map(line =>
-        new Paragraph({ children: [new TextRun(line)] })
-      )
-    }]
-  });
-  const blob = await Packer.toBlob(doc);
-  downloadBlob(blob, "transcript.docx");
-};
-
-const exportAsPdf = async (text) => {
-  const { default: jsPDF } = await import("jspdf");
-  const doc = new jsPDF();
-  let y = 10;
-  text.split("\n").forEach(line => {
-    doc.text(line, 10, y);
-    y += 8;
-    if (y > 280) {
-      doc.addPage();
-      y = 10;
+  // ---- DOWNLOAD ----
+  const onDownload = async () => {
+    if (!finalText.trim()) {
+      alert("No final transcription to download.");
+      return;
     }
-  });
-  doc.save("transcript.pdf");
-};
+    
+    const format = downloadFormat;
+    let downloadUrl = null;
 
-const exportAsSrt = (text) => {
-  const lines = text.split("\n").filter(Boolean);
-  const srt = lines.map((line, i) => {
-    const start = new Date(i * 4000).toISOString().substr(11, 8) + ",000";
-    const end = new Date((i + 1) * 4000).toISOString().substr(11, 8) + ",000";
-    return `${i + 1}\n${start} --> ${end}\n${line}\n`;
-  }).join("\n");
+    // Construct download URL based on the last transcription mode and ID
+    if (lastMode === "file" && fileId) {
+      downloadUrl = `${API_URL}/download-file-result/${fileId}?format=${format}`;
+    } else if (lastMode === "live" && liveSessionId) {
+      downloadUrl = `${API_URL}/download-transcription/${liveSessionId}?format=${format}`;
+    } else {
+      alert("No active session or file ID available to download.");
+      return;
+    }
 
-  const blob = new Blob([srt], { type: "text/plain" });
-  downloadBlob(blob, "transcript.srt");
-};
+    setStatus(`Requesting ${format.toUpperCase()} download...`);
+    
+    try {
+      const resp = await fetch(downloadUrl);
+      if (!resp.ok) {
+        throw new Error(`Download failed. Server returned status: ${resp.status}`);
+      }
 
-const downloadBlob = (blob, filename) => {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-};
-
-
-  // --- Render logic ---
+      const blob = await resp.blob(); 
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `transcription_session_${format}.zip`; 
+      a.click();
+      window.URL.revokeObjectURL(url);
+      setStatus("Download complete");
+      
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Download failed: " + err.message);
+      setStatus("Error during download");
+    }
+  };
+  
+  const sentimentClass = getSentimentClass(overallSentiment.label);
 
   return (
     <div className="app">
@@ -448,11 +357,14 @@ const downloadBlob = (blob, filename) => {
             className={`tab ${tab === "stt" ? "active" : ""}`}
             onClick={() => setTab("stt")}
           >
-            <span className="tab-emoji">🗣️</span> Live Recorder
+            <span className="tab-emoji">🗣️</span> Speech to Text
+          </button>
+          <button className="tab muted">
+            <span className="tab-emoji">📝</span> Summarization (WIP)
           </button>
         </div>
 
-        {/* Controls row */}
+        {/* Controls */}
         <div className="row">
           <select
             value={lang}
@@ -461,85 +373,49 @@ const downloadBlob = (blob, filename) => {
             disabled={isRecording}
           >
             <option value="en-US">English</option>
-            // <option value="es-ES">Spanish</option>
-            // <option value="fr-FR">French</option>
-            // <option value="hi-IN">Hindi</option>
           </select>
 
-          {/* Live Recording Controls */}
           {!isRecording ? (
             <button className="speak" onClick={startLive}>
               <span className="mic">🎤</span> Start Recording
             </button>
           ) : (
-            <button className="stop" onClick={stopLive}>
+            <button className="stop" onClick={() => stopLive(false)}>
               ⏹ Stop
             </button>
           )}
 
-         <div style={{
-              background: "#ffffff",
-              border: "1px solid #ddd",
-              borderRadius: "6px",
-              padding: "12px",
-              maxHeight: "180px",  
-              overflowY: "auto",
-              fontFamily: "'Segoe UI', sans-serif",
-              fontSize: "13px",    
-              lineHeight: "1.4",
-              boxShadow: "0 1px 4px rgba(0, 0, 0, 0.05)",
-              width: "100%",        
-              maxWidth: "500px",   
-            }}>
-              {finalText.split("\n").map((line, index) => {
-                const match = line.match(/^\[(.*?)\]\s(.*)$/);
-                const time = match?.[1] ?? "";
-                const content = match?.[2] ?? line;
-
-                return (
-                  <div key={index} style={{
-                    marginBottom: "8px",
-                    padding: "6px 8px",
-                    background: "#f5f5f5",
-                    borderRadius: "4px"
-                  }}>
-                    <span style={{
-                      color: "#888",
-                      fontSize: "11px",
-                      display: "block",
-                      marginBottom: "2px"
-                    }}>
-                      {time}
-                    </span>
-                    <span style={{
-                      color: "#222"
-                    }}>
-                      {content}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-
           <div className="status">Status: {status}</div>
         </div>
-        
-        {/* Copy Confirmation Message */}
-        {copyMessage && (
-            <div className="copy-confirmation">{copyMessage}</div>
-        )}
 
-        {/* Transcript panel */}
+        {/* Transcript */}
         <div className="panel">
           {displayText ? (
             <div className="text">{displayText}</div>
           ) : (
             <div className="hint">
-              Speak your mind, we’ll turn it into text. Live transcripts appear here.
-              {sessionId && <div className="text-xs mt-2 text-gray-400">Session ID: {sessionId}</div>}
+              Speak or upload audio, and we’ll turn it into text.
             </div>
           )}
+        </div>
+
+        {/* 🧠 Sentiment Box */}
+        <div className="sentiment-box">
+          <h4 className="sentiment-title">🧠 Sentiment Analysis</h4>
+          <p className={`sentiment-label ${sentimentClass}`}>
+            Overall Sentiment: {overallSentiment.label?.toUpperCase() || 'N/A'}
+          </p>
+          <div className="sentiment-distribution">
+            <span className="sentiment-positive">
+              😊 Positive: {overallSentiment.distribution?.positive || "0%"}
+            </span>
+            <span className="sentiment-neutral">
+              😐 Neutral: {overallSentiment.distribution?.neutral || "0%"}
+            </span>
+            <span className="sentiment-negative">
+              😠 Negative: {overallSentiment.distribution?.negative || "0%"}
+            </span>
+          </div>
         </div>
 
         {/* OR divider */}
@@ -549,135 +425,54 @@ const downloadBlob = (blob, filename) => {
           <div className="line" />
         </div>
 
-        {/* File Selection */}
-        <label className="file-btn" disabled={isRecording}>
+        {/* File Input */}
+        <label className="transcribe file-btn">
           Use Your Own File
-          <input 
-            type="file" 
-            accept="audio/*,video/*" 
-            onChange={onPickFile} 
-            hidden 
+          <input
+            type="file"
+            accept="audio/*,video/*"
+            onChange={onPickFile}
+            hidden
           />
         </label>
 
         {/* Process File */}
-        <button 
-          className="transcribe" 
+        <button
+          className="transcribe"
           onClick={onProcessFile}
           disabled={!fileToProcess || isRecording}
         >
-          {fileToProcess ? `Process File: ${fileToProcess.name}` : "Process File"}
+          {fileToProcess
+            ? `Process File: ${fileToProcess.name}`
+            : "Process File"}
         </button>
 
-        {/* Footer actions */}
+        {/* Footer */}
         <div className="footer">
-          <div
-            style={{
-              marginTop: 20,
-              padding: "8px 14px",
-              borderRadius: "6px",
-              backgroundColor: "#222",
-              color: "#fff",
-              fontSize: "14px",
-              width: "fit-content",
-              margin: "0 auto",
-              textAlign: "center",
-              display: "flex",
-              gap: "16px",
-              alignItems: "center",
-              justifyContent: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            🎯 Tone: 
-            <span style={{ color: "#4caf50" }}>😊 Positive: {tonePercentages.positive}%</span>
-            <span style={{ color: "#ffc107" }}>😐 Neutral: {tonePercentages.neutral}%</span>
-            <span style={{ color: "#f44336" }}>😠 Negative: {tonePercentages.negative}%</span>
-          </div>
-
-          <button className="link" onClick={onCopy} disabled={!canCopy}>
-          Copy Transcript
+          <button className="link" onClick={onCopy} disabled={!finalText}>
+            Copy
           </button>
           
-          {/* Download button uses the server-provided URL for live sessions */}
-          <button 
-            className="link" 
-            onClick={onDownloadSession} 
-            disabled={!sessionId}
+          <select 
+            className="select"
+            value={downloadFormat}
+            onChange={(e) => setDownloadFormat(e.target.value)}
+            disabled={!(liveSessionId || fileId) || !finalText} 
+            style={{ marginRight: '10px' }} 
           >
-            Download
-          </button>
+            <option value="txt">Text (.txt)</option>
+            <option value="docx">Word (.docx)</option> 
+            <option value="srt">Subtitles (.srt)</option>
+            <option value="pdf">PDF (.pdf)</option>
+          </select>
           
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-
-
-                {/* Export dropdown text trigger */}
-                <div style={{ position: "relative" }}>
-                  <span
-                onClick={() => setShowExportMenu((prev) => !prev)}
-                style={{
-                  cursor: "pointer",
-                  color: "#b9b7b7ff",
-                  textDecoration: "none",
-                  fontSize: "13px",
-                  fontWeight: "500",
-                  padding: "6px 10px",
-                  display: "inline-block",
-                  transition: "color 0.2s ease-in-out",
-                }}
-                onMouseEnter={(e) => (e.target.style.color = "#fff")}
-                onMouseLeave={(e) => (e.target.style.color = "#ccc")}
-              >
-                Export
-              </span>
-
-                {showExportMenu && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "36px", // this ensures dropdown appears directly below
-                      left: 0,
-                      backgroundColor: "#fff",
-                      border: "1px solid #ccc",
-                      borderRadius: 4,
-                      boxShadow: "0 1px 5px rgba(0, 0, 0, 0.1)",
-                      zIndex: 9999,
-                      minWidth: "120px",
-                      fontSize: "13px",
-                    }}
-                  >
-                    {[
-                      { label: ".txt", value: "txt" },
-                      { label: ".docx", value: "docx" },
-                      { label: ".pdf", value: "pdf" },
-                      { label: ".srt", value: "srt" },
-                    ].map((option) => (
-                      <div
-                        key={option.value}
-                        onClick={async () => {
-                          setShowExportMenu(false);
-                          if (option.value === "txt") exportAsTxt(finalText);
-                          else if (option.value === "docx") await exportAsDocx(finalText);
-                          else if (option.value === "pdf") await exportAsPdf(finalText);
-                          else if (option.value === "srt") exportAsSrt(finalText);
-                        }}
-                        style={{
-                          padding: "6px 10px",
-                          cursor: "pointer",
-                          color: "#333",
-                          backgroundColor: "#fff",
-                          whiteSpace: "nowrap",
-                        }}
-                        onMouseEnter={(e) => (e.target.style.backgroundColor = "#f0f0f0")}
-                        onMouseLeave={(e) => (e.target.style.backgroundColor = "#fff")}
-                      >
-                        {option.label}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+          <button
+            className="link"
+            onClick={onDownload}
+            disabled={!(liveSessionId || fileId) || !finalText} 
+          >
+            Download ZIP
+          </button>
         </div>
       </div>
     </div>
