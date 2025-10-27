@@ -1,42 +1,227 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+:root {
+  --bg: #0b0b0d;
+  --card: #141418;
+  --muted: #2a2a32;
+  --text: #e8e8ef;
+  --sub: #a9a9b6;
+  --accent1: #00ffa3;
+  --accent2: #00d1ff;
+  --danger: #e84749;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+* { box-sizing: border-box; }
+
+body, html, #root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.app {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
 }
 
 .card {
-  padding: 2em;
+  width: 100%;
+  max-width: 900px;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  padding: 20px;
 }
 
-.read-the-docs {
-  color: #888;
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
+.tab {
+  background: var(--muted);
+  border: none;
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.tab.active {
+  background: linear-gradient(90deg, var(--accent2), var(--accent1));
+  color: #041016;
+}
+.tab.muted {
+  opacity: 0.6;
+}
+.tab-emoji { margin-right: 6px; }
+
+/* Top row */
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.select {
+  background: #0f0f14;
+  color: var(--text);
+  border: 1px solid #24242d;
+  padding: 10px 12px;
+  border-radius: 12px;
+  outline: none;
+}
+.speak {
+  position: relative;
+  border: none;
+  color: #001115;
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  background: linear-gradient(90deg, var(--accent2), var(--accent1));
+  box-shadow: 0 0 18px rgba(0, 209, 255, 0.25), inset 0 0 6px rgba(255,255,255,0.25);
+}
+.speak .mic { margin-right: 6px; }
+.speak:hover { filter: brightness(1.05); }
+
+.stop {
+  border: none;
+  background: var(--danger);
+  color: white;
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.status {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--sub);
+}
+
+/* Transcript panel */
+.panel {
+  height: 180px;
+  background: #0f0f14;
+  border: 1px solid #24242d;
+  border-radius: 12px;
+  padding: 14px;
+  overflow-y: auto;
+}
+.hint { color: var(--sub); }
+.text { white-space: pre-wrap; line-height: 1.6; }
+
+/* OR divider */
+.or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+}
+.line {
+  height: 1px; flex: 1; background: #2a2a33;
+}
+.or-text {
+  font-size: 12px; color: var(--sub); letter-spacing: 0.2em;
+}
+
+/* Buttons */
+.file-btn, .transcribe {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #2b2b34;
+  background: #101016;
+  color: var(--text);
+  padding: 12px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.file-btn:hover, .transcribe:hover { filter: brightness(1.1); }
+
+.transcribe {
+  width: 100%;
+  font-weight: 700;
+}
+
+/* Footer links */
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-top: 8px;
+}
+.link {
+  border: none;
+  background: transparent;
+  color: var(--sub);
+  cursor: pointer;
+}
+.link:hover { color: var(--text); }
+
+/* --- Sentiment Box Styles (Recommended Addition) --- */
+
+.sentiment-box {
+  background: var(--muted);
+  border-radius: 10px;
+  padding: 15px;
+  margin: 20px auto; /* Center it */
+  text-align: center;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.sentiment-title {
+  font-size: 1.1em;
+  font-weight: 700;
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: var(--accent1);
+}
+
+.sentiment-label {
+  font-size: 1em;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.sentiment-label.positive {
+  color: #4caf50; /* Standard green */
+}
+
+.sentiment-label.negative {
+  color: var(--danger);
+}
+
+.sentiment-label.neutral {
+  color: var(--sub);
+}
+
+.sentiment-distribution {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  font-size: 0.85em;
+}
+
+.sentiment-distribution span {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #101016; /* Darker background for distribution pills */
+}
+
+/* Specific distribution colors */
+.sentiment-distribution .sentiment-positive { color: #4caf50; }
+.sentiment-distribution .sentiment-neutral { color: #ffc107; }
+.sentiment-distribution .sentiment-negative { color: var(--danger); }
