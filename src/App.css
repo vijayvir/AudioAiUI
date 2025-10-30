@@ -170,6 +170,58 @@ body, html, #root {
 }
 .link:hover { color: var(--text); }
 
+/* Polished footer action styles */
+.footer {
+  align-items: center;
+  padding-top: 8px;
+}
+
+/* Vertical separator for footer actions */
+.v-sep {
+  width: 2px;
+  height: 28px;
+  background: #2a2a33;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #2b2b34;
+  background: #101016;
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn:hover { filter: brightness(1.08); box-shadow: 0 0 0 2px rgba(0,209,255,0.08) inset; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-primary {
+  border: none;
+  background: linear-gradient(90deg, var(--accent2), var(--accent1));
+  color: #041016;
+  font-weight: 700;
+}
+.btn-primary:hover { filter: brightness(1.06); }
+
+.btn-secondary {
+  background: #151520;
+  border: 1px solid #2b2b34;
+  color: var(--text);
+}
+
+.select--fancy {
+  background: #0f0f14;
+  border: 1px solid #2b2b34;
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 10px;
+  min-width: 180px;
+}
+
 /* --- Sentiment Box Styles (Recommended Addition) --- */
 
 .sentiment-box {

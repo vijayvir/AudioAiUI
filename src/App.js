@@ -493,12 +493,13 @@ export default function App() {
 
         {/* Footer */}
         <div className="footer">
-          <button className="link" onClick={onCopy} disabled={!finalText}>
-            Copy
+          <button className="btn btn-secondary" onClick={onCopy} disabled={!finalText}>
+            Copy Generated Text
           </button>
+          <span className="v-sep" aria-hidden="true"></span>
           
           <select 
-            className="select"
+            className="select select--fancy"
             value={downloadFormat}
             onChange={(e) => setDownloadFormat(e.target.value)}
             disabled={!(liveSessionId || fileId) || !finalText} 
@@ -509,9 +510,10 @@ export default function App() {
             <option value="srt">Subtitles (.srt)</option>
             <option value="pdf">PDF (.pdf)</option>
           </select>
+          <span className="v-sep" aria-hidden="true"></span>
           
           <button
-            className="link"
+            className="btn btn-primary"
             onClick={onDownload}
             disabled={!(liveSessionId || fileId) || !finalText} 
           >
