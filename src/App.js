@@ -510,6 +510,7 @@ export default function App() {
             <option value="srt">Subtitles (.srt)</option>
             <option value="pdf">PDF (.pdf)</option>
           </select>
+          <span className="v-sep" aria-hidden="true"></span>
           
           <button
             className="btn btn-primary"
