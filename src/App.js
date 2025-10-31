@@ -32,6 +32,10 @@ export default function App() {
     score: 0
   });
 
+  // --- Summarization (WIP) ---
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [summaryText, setSummaryText] = useState("");
+
   // Refs for Web Audio API
   const socketRef = useRef(null);
   const streamRef = useRef(null);
@@ -139,11 +143,18 @@ export default function App() {
 
           } else if (data.type === "session_end" && data.final_text) {
             // FIX: Handle final overall result sent by backend after 'stop'
-            setFinalText(data.final_text.trim());
+            const final = (data.final_text || "").trim();
+            const summary = data.summary || "";
+            setFinalText(final);
             setPartialText("");
             setStatus("✅ Final transcription ready");
             setCanCopy(true);
             if (data.overall_sentiment) setOverallSentiment(data.overall_sentiment);
+
+            if (summary) {
+              setSummaryText(summary);
+              setShowSummaryModal(true);
+            }
           }
         } catch (e) {
           console.error("Error parsing WebSocket message:", e);
@@ -264,7 +275,8 @@ export default function App() {
       const transcription = data?.transcription;
       const text = transcription?.text || transcription || "";
       const sentiment = data?.overall_sentiment || null;
-      
+      const summary = data?.summary || "";
+
       // CAPTURE FILE ID AND MODE
       if (data.file_id) {
           setFileId(data.file_id);
@@ -285,6 +297,11 @@ export default function App() {
       setFinalText(text);
       setCanCopy(!!text);
       setStatus("Complete");
+
+      if (summary) {
+        setSummaryText(summary);
+        setShowSummaryModal(true);
+      }
 
     } catch (err) {
       console.error(err);
@@ -345,7 +362,25 @@ export default function App() {
       setStatus("Error during download");
     }
   };
-  
+
+  // ---- SUMMARIZATION ----
+  const onSummarize = async () => {
+    if (!summaryText.trim() && !finalText.trim()) {
+      alert("Please transcribe audio first.");
+      return;
+    }
+
+    // If we already have summary from backend, show it directly
+    if (summaryText.trim()) {
+      setShowSummaryModal(true);
+      return;
+    }
+
+    // Otherwise show fallback message
+    setSummaryText("⚠️ No summary available yet. Try transcribing a file or live session first.");
+    setShowSummaryModal(true);
+  };
+
   const sentimentClass = getSentimentClass(overallSentiment.label);
 
   return (
@@ -359,9 +394,18 @@ export default function App() {
           >
             <span className="tab-emoji">🗣️</span> Speech to Text
           </button>
-          <button className="tab muted">
-            <span className="tab-emoji">📝</span> Summarization (WIP)
+          <button className="tab" onClick={onSummarize}>
+            <span className="tab-emoji">📝</span> Summarization
           </button>
+          {showSummaryModal && (
+            <div className="modal-overlay" onClick={() => setShowSummaryModal(false)}>
+              <div className="modal" onClick={(e) => e.stopPropagation()}>
+                <h3>📝 Summary</h3>
+                <p>{summaryText}</p>
+                <button onClick={() => setShowSummaryModal(false)}>Close</button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Controls */}
@@ -470,6 +514,7 @@ export default function App() {
             <option value="srt">Subtitles (.srt)</option>
             <option value="pdf">PDF (.pdf)</option>
           </select>
+          <span className="v-sep" aria-hidden="true"></span>
           
           <button
             className="btn btn-primary"
