@@ -401,17 +401,21 @@ export default function App() {
 
         {/* 🧠 Sentiment Box */}
         <div className="sentiment-box">
-          <h4 className="sentiment-title">🧠 Sentiment Analysis</h4>
-          <p className={`sentiment-label ${sentimentClass}`}>
-            Overall Sentiment: {overallSentiment.label?.toUpperCase() || 'N/A'}
-          </p>
-          <div className="sentiment-distribution">
+          <div className="sentiment-row">
+            <span className="sentiment-title">🧠 Sentiment Analysis</span>
+            <span className="sentiment-sep">|</span>
+            <span className={`sentiment-label ${sentimentClass}`}>
+              Overall Sentiment: {overallSentiment.label?.toUpperCase() || 'N/A'}
+            </span>
+            <span className="sentiment-sep">|</span>
             <span className="sentiment-positive">
               😊 Positive: {overallSentiment.distribution?.positive || "0%"}
             </span>
+            <span className="sentiment-sep">|</span>
             <span className="sentiment-neutral">
               😐 Neutral: {overallSentiment.distribution?.neutral || "0%"}
             </span>
+            <span className="sentiment-sep">|</span>
             <span className="sentiment-negative">
               😠 Negative: {overallSentiment.distribution?.negative || "0%"}
             </span>

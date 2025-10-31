@@ -277,3 +277,29 @@ body, html, #root {
 .sentiment-distribution .sentiment-positive { color: #4caf50; }
 .sentiment-distribution .sentiment-neutral { color: #ffc107; }
 .sentiment-distribution .sentiment-negative { color: var(--danger); }
+
+/* Single-row sentiment layout */
+.sentiment-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.sentiment-row > span {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
+}
+
+.sentiment-row .sentiment-title,
+.sentiment-row .sentiment-label {
+  margin: 0; /* Remove block margins to keep perfect vertical centering */
+}
+
+.sentiment-sep {
+  color: var(--sub);
+  opacity: 0.7;
+}
