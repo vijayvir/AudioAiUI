@@ -386,27 +386,21 @@ export default function App() {
   return (
     <div className="app">
       <div className="card">
-        {/* Tabs */}
-        <div className="tabs">
-          <button
-            className={`tab ${tab === "stt" ? "active" : ""}`}
-            onClick={() => setTab("stt")}
-          >
-            <span className="tab-emoji">🗣️</span> Speech to Text
-          </button>
-          <button className="tab" onClick={onSummarize}>
-            <span className="tab-emoji">📝</span> Summarization
-          </button>
-          {showSummaryModal && (
-            <div className="modal-overlay" onClick={() => setShowSummaryModal(false)}>
-              <div className="modal" onClick={(e) => e.stopPropagation()}>
-                <h3>📝 Summary</h3>
-                <p>{summaryText}</p>
-                <button onClick={() => setShowSummaryModal(false)}>Close</button>
-              </div>
+        {/* Title */}
+        <h1 className="app-title">
+          <span className="tab-emoji">🗣️</span> Speech to Text
+        </h1>
+        
+        {/* Summary Modal */}
+        {showSummaryModal && (
+          <div className="modal-overlay" onClick={() => setShowSummaryModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <h3>📝 Summary</h3>
+              <p>{summaryText}</p>
+              <button onClick={() => setShowSummaryModal(false)}>Close</button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Controls */}
         <div className="row">
@@ -496,25 +490,28 @@ export default function App() {
         </button>
 
         {/* Footer */}
-        <div className="footer">
+        <div className="footer footer-row">
+          <button className="btn btn-secondary" onClick={onSummarize}>
+            <span className="tab-emoji">📝</span> Summarization
+          </button>
+          <span className="footer-sep">|</span>
           <button className="btn btn-secondary" onClick={onCopy} disabled={!finalText}>
             Copy Generated Text
           </button>
-          <span className="v-sep" aria-hidden="true"></span>
+          <span className="footer-sep">|</span>
           
           <select 
             className="select select--fancy"
             value={downloadFormat}
             onChange={(e) => setDownloadFormat(e.target.value)}
             disabled={!(liveSessionId || fileId) || !finalText} 
-            style={{ marginRight: '10px' }} 
           >
             <option value="txt">Text (.txt)</option>
             <option value="docx">Word (.docx)</option> 
             <option value="srt">Subtitles (.srt)</option>
             <option value="pdf">PDF (.pdf)</option>
           </select>
-          <span className="v-sep" aria-hidden="true"></span>
+          <span className="footer-sep">|</span>
           
           <button
             className="btn btn-primary"

@@ -29,11 +29,24 @@ body, html, #root {
 
 .card {
   width: 100%;
-  max-width: 900px;
+  max-width: 1000px;
   background: var(--card);
   border-radius: 16px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.35);
   padding: 20px;
+}
+
+/* App Title */
+.app-title {
+  text-align: center;
+  font-size: 1.8em;
+  font-weight: 700;
+  margin: 0 0 24px 0;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 /* Tabs */
@@ -176,7 +189,21 @@ body, html, #root {
   padding-top: 8px;
 }
 
-/* Vertical separator for footer actions */
+/* Footer row layout with separators */
+.footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.footer-sep {
+  color: var(--sub);
+  opacity: 0.7;
+}
+
+/* Vertical separator for footer actions (kept for backward compatibility) */
 .v-sep {
   width: 2px;
   height: 28px;
@@ -344,4 +371,26 @@ body, html, #root {
 .sentiment-sep {
   color: var(--sub);
   opacity: 0.7;
+}
+
+/* Sentiment background colors */
+.sentiment-row .sentiment-positive {
+  background-color: #4caf50; /* Green */
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.sentiment-row .sentiment-neutral {
+  background-color: #2196f3; /* Blue */
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.sentiment-row .sentiment-negative {
+  background-color: var(--danger); /* Red */
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px;
 }
