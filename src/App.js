@@ -418,9 +418,16 @@ export default function App() {
               <span className="mic">🎤</span> Start Recording
             </button>
           ) : (
-            <button className="stop" onClick={() => stopLive(false)}>
-              ⏹ Stop
-            </button>
+            <>
+              <button className="stop" onClick={() => stopLive(false)}>
+                ⏹ Stop
+              </button>
+              <div className="audio-waveform">
+                {[...Array(12)].map((_, i) => (
+                  <div key={i} className="waveform-bar" style={{ animationDelay: `${i * 0.1}s` }}></div>
+                ))}
+              </div>
+            </>
           )}
 
           <div className="status">Status: {status}</div>
