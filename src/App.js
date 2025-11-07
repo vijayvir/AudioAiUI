@@ -153,7 +153,7 @@ export default function App() {
 
             if (summary) {
               setSummaryText(summary);
-              setShowSummaryModal(true);
+              // setShowSummaryModal(true);
             }
           }
         } catch (e) {
@@ -300,7 +300,7 @@ export default function App() {
 
       if (summary) {
         setSummaryText(summary);
-        setShowSummaryModal(true);
+        // setShowSummaryModal(true);
       }
 
     } catch (err) {
