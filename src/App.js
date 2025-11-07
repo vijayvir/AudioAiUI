@@ -43,6 +43,11 @@ export default function App() {
   const processorRef = useRef(null);
   const sourceRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animationFrameRef = useRef(null);
+
+  // Waveform audio levels state (12 bars)
+  const [audioLevels, setAudioLevels] = useState(new Array(12).fill(0));
 
   // FIX: displayText is correctly structured to show FINAL + PARTIAL
   const displayText =
@@ -90,10 +95,18 @@ export default function App() {
         audioContextRef.current = audioCtx;
         const source = audioCtx.createMediaStreamSource(stream);
         sourceRef.current = source;
+        
+        // Create AnalyserNode for waveform visualization
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.8;
+        analyserRef.current = analyser;
+        
         const processor = audioCtx.createScriptProcessor(4096, 1, 1);
         processorRef.current = processor;
 
-        source.connect(processor);
+        source.connect(analyser);
+        analyser.connect(processor);
         processor.connect(audioCtx.destination);
 
         processor.onaudioprocess = (e) => {
@@ -106,6 +119,31 @@ export default function App() {
           }
           if (ws.readyState === WebSocket.OPEN) ws.send(buffer);
         };
+
+        // Start waveform animation
+        const updateWaveform = () => {
+          if (!analyserRef.current) return;
+          
+          const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+          analyserRef.current.getByteFrequencyData(dataArray);
+          
+          // Map frequency data to 12 bars
+          const barCount = 12;
+          const step = Math.floor(dataArray.length / barCount);
+          const levels = [];
+          
+          for (let i = 0; i < barCount; i++) {
+            const index = i * step;
+            const value = dataArray[index] || 0;
+            // Normalize to 0-100% for bar height
+            levels.push((value / 255) * 100);
+          }
+          
+          setAudioLevels(levels);
+          animationFrameRef.current = requestAnimationFrame(updateWaveform);
+        };
+        
+        updateWaveform();
 
         const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
         mediaRecorderRef.current = mr;
@@ -195,9 +233,19 @@ export default function App() {
         // Do NOT close the socket here; let the backend send the final message first.
     }
     
+    // Stop waveform animation
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
+    // Reset audio levels
+    setAudioLevels(new Array(12).fill(0));
+    
     // Cleanup Web Audio API and Mic stream
     try {
       if (processorRef.current) processorRef.current.disconnect();
+      if (analyserRef.current) analyserRef.current.disconnect();
       if (sourceRef.current) sourceRef.current.disconnect();
       if (audioContextRef.current) audioContextRef.current.close();
       
@@ -214,6 +262,7 @@ export default function App() {
       audioContextRef.current = null;
       processorRef.current = null;
       sourceRef.current = null;
+      analyserRef.current = null;
       mediaRecorderRef.current = null;
       
       // Reset status if it was an error, otherwise keep "Processing" status 
@@ -423,8 +472,15 @@ export default function App() {
                 ⏹ Stop
               </button>
               <div className="audio-waveform">
-                {[...Array(12)].map((_, i) => (
-                  <div key={i} className="waveform-bar" style={{ animationDelay: `${i * 0.1}s` }}></div>
+                {audioLevels.map((level, i) => (
+                  <div 
+                    key={i} 
+                    className="waveform-bar" 
+                    style={{ 
+                      height: `${Math.max(20, level)}%`,
+                      transition: 'height 0.1s ease-out'
+                    }}
+                  ></div>
                 ))}
               </div>
             </>
