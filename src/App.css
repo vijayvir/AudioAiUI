@@ -118,7 +118,7 @@ body, html, #root {
 /* Audio Waveform */
 .audio-waveform {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 3px;
   height: 38px; /* Same as button height */
   padding: 0 8px;
@@ -126,35 +126,11 @@ body, html, #root {
 
 .waveform-bar {
   width: 3px;
+  min-height: 20%;
   background: linear-gradient(180deg, var(--accent2), var(--accent1));
   border-radius: 2px;
-  animation: waveform-animation 0.8s ease-in-out infinite;
+  opacity: 0.9;
 }
-
-@keyframes waveform-animation {
-  0%, 100% {
-    height: 20%;
-    opacity: 0.7;
-  }
-  50% {
-    height: 90%;
-    opacity: 1;
-  }
-}
-
-/* Different animation delays create random-looking effect */
-.waveform-bar:nth-child(1) { animation-duration: 0.6s; }
-.waveform-bar:nth-child(2) { animation-duration: 0.8s; }
-.waveform-bar:nth-child(3) { animation-duration: 0.7s; }
-.waveform-bar:nth-child(4) { animation-duration: 0.9s; }
-.waveform-bar:nth-child(5) { animation-duration: 0.6s; }
-.waveform-bar:nth-child(6) { animation-duration: 0.85s; }
-.waveform-bar:nth-child(7) { animation-duration: 0.75s; }
-.waveform-bar:nth-child(8) { animation-duration: 0.65s; }
-.waveform-bar:nth-child(9) { animation-duration: 0.9s; }
-.waveform-bar:nth-child(10) { animation-duration: 0.7s; }
-.waveform-bar:nth-child(11) { animation-duration: 0.8s; }
-.waveform-bar:nth-child(12) { animation-duration: 0.6s; }
 
 .status {
   margin-left: auto;
