@@ -370,8 +370,8 @@ body, html, #root {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  flex-wrap: nowrap;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  white-space: normal;
 }
 
 .sentiment-row > span {
@@ -410,4 +410,61 @@ body, html, #root {
   color: white;
   padding: 4px 8px;
   border-radius: 6px;
+}
+
+/* Responsive adjustments for sentiment row */
+@media (max-width: 768px) {
+  .sentiment-row {
+    gap: 6px;
+    font-size: 0.9em;
+  }
+  
+  .sentiment-row .sentiment-title {
+    font-size: 0.95em;
+  }
+  
+  .sentiment-row .sentiment-label {
+    font-size: 0.9em;
+  }
+  
+  .sentiment-row .sentiment-positive,
+  .sentiment-row .sentiment-neutral,
+  .sentiment-row .sentiment-negative {
+    padding: 3px 6px;
+    font-size: 0.85em;
+  }
+  
+  .sentiment-sep {
+    margin: 0 2px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sentiment-row {
+    gap: 4px;
+    font-size: 0.8em;
+  }
+  
+  .sentiment-row .sentiment-title {
+    font-size: 0.9em;
+  }
+  
+  .sentiment-row .sentiment-label {
+    font-size: 0.85em;
+  }
+  
+  .sentiment-row .sentiment-positive,
+  .sentiment-row .sentiment-neutral,
+  .sentiment-row .sentiment-negative {
+    padding: 2px 4px;
+    font-size: 0.75em;
+  }
+  
+  .sentiment-sep {
+    margin: 0 1px;
+  }
+  
+  .sentiment-box {
+    padding: 12px;
+  }
 }

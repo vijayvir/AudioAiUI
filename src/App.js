@@ -14,7 +14,7 @@ export default function App() {
   const [finalText, setFinalText] = useState("");
   const [partialText, setPartialText] = useState("");
   const [canCopy, setCanCopy] = useState(false);
-  const [downloadFormat, setDownloadFormat] = useState("txt"); 
+  const [downloadFormat, setDownloadFormat] = useState(""); 
 
   const [audioChunks, setAudioChunks] = useState([]);
   const [audioBlob, setAudioBlob] = useState(null);
@@ -375,6 +375,11 @@ export default function App() {
       return;
     }
     
+    if (!downloadFormat) {
+      alert("Please select a file type.");
+      return;
+    }
+    
     const format = downloadFormat;
     let downloadUrl = null;
 
@@ -569,6 +574,7 @@ export default function App() {
             onChange={(e) => setDownloadFormat(e.target.value)}
             disabled={!(liveSessionId || fileId) || !finalText} 
           >
+            <option value="">Select File Type</option>
             <option value="txt">Text (.txt)</option>
             <option value="docx">Word (.docx)</option> 
             <option value="srt">Subtitles (.srt)</option>
@@ -579,7 +585,7 @@ export default function App() {
           <button
             className="btn btn-primary"
             onClick={onDownload}
-            disabled={!(liveSessionId || fileId) || !finalText} 
+            disabled={!(liveSessionId || fileId) || !finalText || !downloadFormat} 
           >
             Download ZIP
           </button>
