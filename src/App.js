@@ -14,7 +14,8 @@ export default function App() {
   const [finalText, setFinalText] = useState("");
   const [partialText, setPartialText] = useState("");
   const [canCopy, setCanCopy] = useState(false);
-  const [downloadFormat, setDownloadFormat] = useState(""); 
+  const [downloadFormat, setDownloadFormat] = useState("");
+  const [isProcessingFile, setIsProcessingFile] = useState(false); 
 
   const [audioChunks, setAudioChunks] = useState([]);
   const [audioBlob, setAudioBlob] = useState(null);
@@ -306,6 +307,7 @@ export default function App() {
     // Reset output text
     setFinalText("");
     setPartialText("");
+    setIsProcessingFile(true);
 
     try {
       setStatus(`Uploading: ${file.name}...`);
@@ -357,6 +359,7 @@ export default function App() {
       alert("Transcription failed: " + err.message);
       setStatus("Failed");
     } finally {
+      setIsProcessingFile(false);
       setFileToProcess(null);
     }
   };
@@ -496,11 +499,16 @@ export default function App() {
 
         {/* Transcript */}
         <div className="panel">
-          {displayText ? (
+          {isProcessingFile ? (
+            <div className="loader-container">
+              <div className="loader"></div>
+              <p className="loader-text">Processing your file...</p>
+            </div>
+          ) : displayText ? (
             <div className="text">{displayText}</div>
           ) : (
             <div className="hint">
-              Speak or upload audio, and we’ll turn it into text.
+              Speak or upload audio, and we'll turn it into text.
             </div>
           )}
         </div>

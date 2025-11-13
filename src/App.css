@@ -150,6 +150,36 @@ body, html, #root {
 .hint { color: var(--sub); }
 .text { white-space: pre-wrap; line-height: 1.6; }
 
+/* Loader */
+.loader-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+}
+
+.loader {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--muted);
+  border-top: 4px solid var(--accent1);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loader-text {
+  color: var(--sub);
+  font-size: 0.9em;
+  margin: 0;
+}
+
 /* OR divider */
 .or {
   display: flex;
