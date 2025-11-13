@@ -13,6 +13,7 @@ export default function App() {
   const [status, setStatus] = useState("Idle");
   const [finalText, setFinalText] = useState("");
   const [partialText, setPartialText] = useState("");
+  const [liveTranscript, setLiveTranscript] = useState(""); // Accumulated live transcript chunks
   const [canCopy, setCanCopy] = useState(false);
   const [downloadFormat, setDownloadFormat] = useState("");
   const [isProcessingFile, setIsProcessingFile] = useState(false); 
@@ -50,7 +51,9 @@ export default function App() {
   // Waveform audio levels state (12 bars)
   const [audioLevels, setAudioLevels] = useState(new Array(12).fill(0));
 
-  // FIX: displayText is correctly structured to show FINAL + PARTIAL
+  // FIX: displayText is correctly structured to show LIVE + PARTIAL or FINAL
+  // For live recording: show liveTranscript + partialText
+  // For file upload: show finalText
   const displayText =
     (finalText ? finalText.trimEnd() : "") +
     (partialText ? " " + partialText : "");
@@ -70,6 +73,7 @@ export default function App() {
       setStatus("Requesting microphone…");
       setFinalText("");
       setPartialText("");
+      setLiveTranscript("");
       setCanCopy(false);
       setAudioBlob(null);
       setFileToProcess(null);
@@ -169,8 +173,8 @@ export default function App() {
           }
           
           if (data.type === "final" && data.text) {
-             // FIX: When a 'final' segment arrives, append it to finalText and clear partialText
-            setFinalText(prev => (prev.trimEnd() + " " + data.text).trim());
+             // FIX: When a 'final' segment arrives, append it to liveTranscript and clear partialText
+            setLiveTranscript(prev => (prev.trimEnd() + " " + data.text).trim());
             setPartialText("");
             
             if (data.sentiment) setOverallSentiment(data.sentiment); 
@@ -182,6 +186,7 @@ export default function App() {
 
           } else if (data.type === "session_end" && data.final_text) {
             // FIX: Handle final overall result sent by backend after 'stop'
+            // Store the enhanced/formatted version in finalText, but keep liveTranscript
             const final = (data.final_text || "").trim();
             const summary = data.summary || "";
             setFinalText(final);
@@ -290,6 +295,7 @@ export default function App() {
       setFileToProcess(file);
       setFinalText("");
       setPartialText("");
+      setLiveTranscript("");
       setCanCopy(false);
       setStatus(`File Selected: ${file.name}`);
     } else {
@@ -307,6 +313,7 @@ export default function App() {
     // Reset output text
     setFinalText("");
     setPartialText("");
+    setLiveTranscript("");
     setIsProcessingFile(true);
 
     try {
@@ -504,8 +511,22 @@ export default function App() {
               <div className="loader"></div>
               <p className="loader-text">Processing your file...</p>
             </div>
-          ) : displayText ? (
-            <div className="text">{displayText}</div>
+          ) : liveTranscript || finalText ? (
+            <div className="text">
+              {liveTranscript && (
+                <>
+                  <div className="transcript-label">Live:</div>
+                  <div className="transcript-content">{liveTranscript}{partialText ? " " + partialText : ""}</div>
+                </>
+              )}
+              {finalText && (
+                <>
+                  {liveTranscript && <div className="transcript-spacer"></div>}
+                  <div className="transcript-label enhanced">Enhanced version:</div>
+                  <div className="transcript-content">{finalText}</div>
+                </>
+              )}
+            </div>
           ) : (
             <div className="hint">
               Speak or upload audio, and we'll turn it into text.
