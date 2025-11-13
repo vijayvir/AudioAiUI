@@ -16,7 +16,8 @@ export default function App() {
   const [liveTranscript, setLiveTranscript] = useState(""); // Accumulated live transcript chunks
   const [canCopy, setCanCopy] = useState(false);
   const [downloadFormat, setDownloadFormat] = useState("");
-  const [isProcessingFile, setIsProcessingFile] = useState(false); 
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState(0); 
 
   const [audioChunks, setAudioChunks] = useState([]);
   const [audioBlob, setAudioBlob] = useState(null);
@@ -315,11 +316,30 @@ export default function App() {
     setPartialText("");
     setLiveTranscript("");
     setIsProcessingFile(true);
+    setProcessingProgress(0);
+
+    // Simulate progress function
+    let progressInterval = null;
+    const simulateProgress = () => {
+      let progress = 0;
+      progressInterval = setInterval(() => {
+        progress += Math.random() * 12 + 3; // Random increment between 3-15%
+        if (progress >= 95) {
+          progress = 95; // Stop at 95%, wait for actual completion
+          setProcessingProgress(95);
+        } else {
+          setProcessingProgress(Math.min(Math.round(progress), 95));
+        }
+      }, 300); // Update every 300ms
+    };
 
     try {
       setStatus(`Uploading: ${file.name}...`);
       const fd = new FormData();
       fd.append("file", file);
+
+      // Start progress simulation
+      simulateProgress();
 
       const res = await fetch(
         API_URL + "/file-transcribe",
@@ -328,6 +348,13 @@ export default function App() {
 
       setStatus("Processing...");
       if (!res.ok) throw new Error(await res.text());
+
+      // Complete progress to 100%
+      if (progressInterval) clearInterval(progressInterval);
+      setProcessingProgress(100);
+      
+      // Small delay to show 100% before hiding loader
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       const data = await res.json();
       const transcription = data?.transcription;
@@ -363,10 +390,12 @@ export default function App() {
 
     } catch (err) {
       console.error(err);
+      if (progressInterval) clearInterval(progressInterval);
       alert("Transcription failed: " + err.message);
       setStatus("Failed");
     } finally {
       setIsProcessingFile(false);
+      setProcessingProgress(0);
       setFileToProcess(null);
     }
   };
@@ -509,7 +538,7 @@ export default function App() {
           {isProcessingFile ? (
             <div className="loader-container">
               <div className="loader"></div>
-              <p className="loader-text">Processing your file...</p>
+              <p className="loader-text">Processing your file... {processingProgress}%</p>
             </div>
           ) : liveTranscript || finalText ? (
             <div className="text">
