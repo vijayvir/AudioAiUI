@@ -7,6 +7,23 @@
   --accent1: #00ffa3;
   --accent2: #00d1ff;
   --danger: #e84749;
+  /* ADDED: Modal/secondary backgrounds */
+  --modal-bg: var(--card);
+  --modal-text: var(--text);
+}
+
+[data-theme="light"] {
+  /* --- Light Mode Colors (NEW BLOCK) --- */
+  --bg: #f9f9fc;
+  --card: #ffffff;
+  --muted: #e8e8ef;
+  --text: #1a1a2e;
+  --sub: #5c5c7d;
+  --accent1: #007bff; /* Primary Blue */
+  --accent2: #0056b3; /* Darker Blue */
+  --danger: #d9534f;
+  --modal-bg: var(--card);
+  --modal-text: var(--text);
 }
 
 * { box-sizing: border-box; }
@@ -17,6 +34,7 @@ body, html, #root {
   background: var(--bg);
   color: var(--text);
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+  transition: background-color 0.3s, color 0.3s;
 }
 
 .app {
@@ -34,6 +52,7 @@ body, html, #root {
   border-radius: 16px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.35);
   padding: 20px;
+  transition: background-color 0.3s, box-shadow 0.3s;
 }
 
 /* App Title */
@@ -83,10 +102,28 @@ body, html, #root {
   margin-bottom: 12px;
   flex-wrap: wrap;
 }
-.select {
-  background: #0f0f14;
+
+/* Theme Toggle Button */
+.theme-toggle {
+  background: var(--muted);
+  border: 1px solid var(--sub);
+  color: var(--sub);
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.theme-toggle:hover {
   color: var(--text);
-  border: 1px solid #24242d;
+  border-color: var(--text);
+}
+
+
+.select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--muted);
   padding: 10px 12px;
   border-radius: 12px;
   outline: none;
@@ -138,11 +175,10 @@ body, html, #root {
   color: var(--sub);
 }
 
-/* Transcript panel */
 .panel {
   height: 180px;
-  background: #0f0f14;
-  border: 1px solid #24242d;
+  background: var(--bg);
+  border: 1px solid var(--muted);
   border-radius: 12px;
   padding: 14px;
   overflow-y: auto;
@@ -212,7 +248,8 @@ body, html, #root {
   margin: 16px 0;
 }
 .line {
-  height: 1px; flex: 1; background: #2a2a33;
+  height: 1px; flex: 1; 
+  background: var(--muted);
 }
 .or-text {
   font-size: 12px; color: var(--sub); letter-spacing: 0.2em;
@@ -224,8 +261,8 @@ body, html, #root {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid #2b2b34;
-  background: #101016;
+  border: 1px solid var(--muted);
+  background: var(--bg);
   color: var(--text);
   padding: 12px 16px;
   border-radius: 12px;
@@ -278,7 +315,7 @@ body, html, #root {
 .v-sep {
   width: 2px;
   height: 28px;
-  background: #2a2a33;
+  background: var(--muted);
 }
 
 .btn {
@@ -286,8 +323,8 @@ body, html, #root {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid #2b2b34;
-  background: #101016;
+  border: 1px solid var(--muted);
+  background: var(--bg);
   color: var(--text);
   padding: 10px 14px;
   border-radius: 10px;
@@ -306,14 +343,14 @@ body, html, #root {
 .btn-primary:hover { filter: brightness(1.06); }
 
 .btn-secondary {
-  background: #151520;
-  border: 1px solid #2b2b34;
+  background: var(--muted);
+  border: 1px solid var(--muted);
   color: var(--text);
 }
 
 .select--fancy {
-  background: #0f0f14;
-  border: 1px solid #2b2b34;
+  background: var(--bg);
+  border: 1px solid var(--muted);
   color: var(--text);
   padding: 10px 12px;
   border-radius: 10px;
@@ -368,12 +405,12 @@ body, html, #root {
 .sentiment-distribution span {
   padding: 4px 8px;
   border-radius: 6px;
-  background: #101016; /* Darker background for distribution pills */
+  background: var(--bg);
 }
 
 /* Specific distribution colors */
 .sentiment-distribution .sentiment-positive { color: #4caf50; }
-.sentiment-distribution .sentiment-neutral { color: #ffc107; }
+.sentiment-distribution .sentiment-neutral { color: var(--accent2); }
 .sentiment-distribution .sentiment-negative { color: var(--danger); }
 
 /* --- Summary Modal --- */
@@ -388,8 +425,8 @@ body, html, #root {
 }
 
 .modal {
-  background: rgb(255, 255, 255);
-  color: #222;
+  background: var(--modal-bg);
+  color: var(--modal-text);
   padding: 24px;
   border-radius: 12px;
   max-width: 480px;
@@ -406,8 +443,8 @@ body, html, #root {
 .modal button {
   margin-top: 16px;
   padding: 8px 16px;
-  background: #007bff;
-  color: white;
+  background: var(--accent1);
+  color: white; /* Keep white for high contrast */
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -453,7 +490,7 @@ body, html, #root {
 }
 
 .sentiment-row .sentiment-neutral {
-  background-color: #2196f3; /* Blue */
+  background-color: var(--accent2); /* Blue */
   color: white;
   padding: 4px 8px;
   border-radius: 6px;

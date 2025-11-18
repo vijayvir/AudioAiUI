@@ -1,5 +1,13 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import "./App.css";
+
+// Helper function for persistence
+const getInitialTheme = () => {
+  if (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) {
+    return localStorage.getItem('theme');
+  }
+  return 'dark'; // Default to dark mode
+};
 
 // --- ENVIRONMENT VARIABLES ---
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000";
@@ -7,6 +15,9 @@ const WS_BASE_URL = process.env.REACT_APP_WEBSOCKET_URL || "ws://127.0.0.1:8000/
 const API_URL = API_BASE_URL.replace(/\/$/, "") + "/api"; // Helper for download URLs
 
 export default function App() {
+  // --- Theme State (NEW) ---
+  const [theme, setTheme] = useState(getInitialTheme);
+
   const [tab, setTab] = useState("stt");
   const [lang, setLang] = useState("en-US");
   const [isRecording, setIsRecording] = useState(false);
@@ -51,6 +62,20 @@ export default function App() {
 
   // Waveform audio levels state (12 bars)
   const [audioLevels, setAudioLevels] = useState(new Array(12).fill(0));
+  
+  // --- THEME LOGIC START (NEW) ---
+  // Effect to apply theme and store preference
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  // Toggle function
+  const toggleTheme = useCallback(() => {
+    setTheme(prevTheme => prevTheme === 'dark' ? 'light' : 'dark');
+  }, []);
+  // --- THEME LOGIC END ---
+
 
   // FIX: displayText is correctly structured to show LIVE + PARTIAL or FINAL
   // For live recording: show liveTranscript + partialText
@@ -479,10 +504,19 @@ export default function App() {
   return (
     <div className="app">
       <div className="card">
-        {/* Title */}
-        <h1 className="app-title">
-          <span className="tab-emoji">🗣️</span> Speech to Text
-        </h1>
+        {/* Title and Theme Toggle (NEW BLOCK) */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="w-1/4">
+            <button onClick={toggleTheme} className="theme-toggle">
+              {theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode'}
+            </button>
+          </div>
+          
+          <h1 className="app-title flex-1">
+            <span className="tab-emoji">🗣️</span> Speech to Text
+          </h1>
+          <div className="w-1/4"></div> {/* Spacer for symmetry */}
+        </div>
         
         {/* Summary Modal */}
         {showSummaryModal && (
