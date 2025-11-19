@@ -318,19 +318,22 @@ export default function App() {
     setIsProcessingFile(true);
     setProcessingProgress(0);
 
-    // Simulate progress function
-    let progressInterval = null;
-    const simulateProgress = () => {
-      let progress = 0;
-      progressInterval = setInterval(() => {
-        progress += Math.random() * 12 + 3; // Random increment between 3-15%
-        if (progress >= 95) {
-          progress = 95; // Stop at 95%, wait for actual completion
-          setProcessingProgress(95);
-        } else {
-          setProcessingProgress(Math.min(Math.round(progress), 95));
-        }
-      }, 300); // Update every 300ms
+    // Simulate processing progress (40-100%)
+    let processingInterval = null;
+    const simulateProcessingProgress = (startFrom = 40) => {
+      return new Promise((resolve) => {
+        let progress = startFrom;
+        processingInterval = setInterval(() => {
+          progress += Math.random() * 8 + 2; // Random increment between 2-10%
+          if (progress >= 95) {
+            clearInterval(processingInterval);
+            setProcessingProgress(95);
+            resolve(); // Resolve when we reach 95%
+          } else {
+            setProcessingProgress(Math.min(Math.round(progress), 95));
+          }
+        }, 300); // Update every 300ms
+      });
     };
 
     try {
@@ -338,25 +341,62 @@ export default function App() {
       const fd = new FormData();
       fd.append("file", file);
 
-      // Start progress simulation
-      simulateProgress();
+      // Use XMLHttpRequest to track upload progress
+      let uploadComplete = false;
+      const data = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
 
-      const res = await fetch(
-        API_URL + "/file-transcribe",
-        { method: "POST", body: fd }
-      );
+        // Track upload progress (0-40%)
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const uploadProgress = Math.round((e.loaded / e.total) * 40); // Scale to 0-40%
+            setProcessingProgress(uploadProgress);
+          }
+        });
 
-      setStatus("Processing...");
-      if (!res.ok) throw new Error(await res.text());
+        // When upload completes, start processing simulation
+        xhr.upload.addEventListener('loadend', () => {
+          uploadComplete = true;
+          setStatus("Processing...");
+          // Start processing simulation from 40%
+          simulateProcessingProgress(40);
+        });
 
-      // Complete progress to 100%
-      if (progressInterval) clearInterval(progressInterval);
-      setProcessingProgress(100);
-      
+        // Handle response
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const responseData = JSON.parse(xhr.responseText);
+              // Stop processing simulation and complete to 100%
+              if (processingInterval) clearInterval(processingInterval);
+              setProcessingProgress(100);
+              resolve(responseData);
+            } catch (e) {
+              reject(new Error('Invalid JSON response'));
+            }
+          } else {
+            if (processingInterval) clearInterval(processingInterval);
+            reject(new Error(xhr.responseText || `Server error: ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          if (processingInterval) clearInterval(processingInterval);
+          reject(new Error('Network error occurred'));
+        });
+
+        xhr.addEventListener('abort', () => {
+          if (processingInterval) clearInterval(processingInterval);
+          reject(new Error('Upload aborted'));
+        });
+
+        // Start the request
+        xhr.open('POST', API_URL + "/file-transcribe");
+        xhr.send(fd);
+      });
+
       // Small delay to show 100% before hiding loader
       await new Promise(resolve => setTimeout(resolve, 300));
-
-      const data = await res.json();
       const transcription = data?.transcription;
       const text = transcription?.text || transcription || "";
       const sentiment = data?.overall_sentiment || null;
@@ -390,7 +430,7 @@ export default function App() {
 
     } catch (err) {
       console.error(err);
-      if (progressInterval) clearInterval(progressInterval);
+      if (processingInterval) clearInterval(processingInterval);
       alert("Transcription failed: " + err.message);
       setStatus("Failed");
     } finally {

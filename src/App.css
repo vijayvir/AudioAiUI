@@ -140,7 +140,7 @@ body, html, #root {
 
 /* Transcript panel */
 .panel {
-  height: 180px;
+  height: 350px;
   background: #0f0f14;
   border: 1px solid #24242d;
   border-radius: 12px;
