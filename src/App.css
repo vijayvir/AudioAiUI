@@ -7,14 +7,12 @@
   --accent1: #00ffa3;
   --accent2: #00d1ff;
   --danger: #e84749;
-  /* ADDED: Modal/secondary backgrounds */
   --modal-bg: var(--card);
   --modal-text: var(--text);
 }
 
 [data-theme="light"] {
-  /* --- Light Mode Colors (NEW BLOCK) --- */
-  --bg: #f9f9fc;
+  --bg: var(--card); 
   --card: #ffffff;
   --muted: #e8e8ef;
   --text: #1a1a2e;
@@ -47,7 +45,7 @@ body, html, #root {
 
 .card {
   width: 100%;
-  max-width: 1000px;
+  max-width: 1400px; 
   background: var(--card);
   border-radius: 16px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.35);
