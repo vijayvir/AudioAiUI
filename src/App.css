@@ -181,6 +181,29 @@ body, html, #root {
   padding: 14px;
   overflow-y: auto;
 }
+
+/* NEW: Split panel for live mode */
+.split-panel {
+  display: flex;
+  gap: 14px;
+  height: 380px; /* Increased height for dual panels */
+  padding: 0; /* Remove padding from parent */
+  border: none; /* Remove border from parent */
+  background: transparent; /* Remove background from parent */
+  overflow: hidden; /* Prevent parent scroll */
+}
+
+/* NEW: Columns inside the split panel */
+.split-panel-col {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--muted);
+  border-radius: 12px;
+  padding: 14px;
+  overflow-y: auto;
+  height: 100%; /* Fill the container height */
+}
+
 .hint { color: var(--sub); }
 .text { white-space: pre-wrap; line-height: 1.6; }
 
@@ -191,6 +214,10 @@ body, html, #root {
   color: var(--sub);
   margin-bottom: 6px;
   margin-top: 0;
+}
+
+.transcript-label.live {
+  color: var(--accent2); /* Use a different accent for Live */
 }
 
 .transcript-label.enhanced {
@@ -525,6 +552,15 @@ body, html, #root {
   
   .sentiment-sep {
     margin: 0 2px;
+  }
+
+  .split-panel {
+    flex-direction: column; /* Stack panels vertically on small screens */
+    height: 380px; /* Keep height, adjust column height accordingly */
+  }
+
+  .split-panel-col {
+    height: 50%; /* Each panel takes half the vertical space */
   }
 }
 

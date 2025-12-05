@@ -83,7 +83,7 @@ export default function App() {
       setFileToProcess(null);
       setFileId(null);
       setLiveSessionId(null);
-      setLastMode("live");
+      setLastMode("live"); // Set mode to live
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, sampleRate: 16000 } });
       streamRef.current = stream;
@@ -245,7 +245,7 @@ export default function App() {
     setAudioBlob(null);
     setLiveSessionId(null);
     setFileId(null);
-    setLastMode("file");
+    setLastMode("file"); // Set mode to file
 
     if (file) {
       setFileToProcess(file);
@@ -404,6 +404,8 @@ export default function App() {
 
   const sentimentClass = getSentimentClass(overallSentiment.label);
 
+  const isSplitView = lastMode === 'live' && (liveTranscript || finalText || isProcessingLive);
+
   return (
     <div className="app">
       <div className="card">
@@ -454,34 +456,63 @@ export default function App() {
         </div>
 
         {/* Transcript */}
-        <div className="panel">
-          {(isProcessingFile || isProcessingLive) ? (
-            <div className="loader-container">
-              <div className="loader"></div>
-              <p className="loader-text">
-                {isProcessingFile ? `Processing your file... ${processingProgress}%` : "Processing live transcription..."}
-              </p>
-            </div>
-          ) : liveTranscript || finalText ? (
-            <div className="text">
-              {liveTranscript && (
-                <>
-                  <div className="transcript-label">Live:</div>
-                  <div className="transcript-content">{liveTranscript}{partialText ? " " + partialText : ""}</div>
-                </>
+        {isSplitView && !isProcessingFile ? (
+          <div className="split-panel">
+            {/* Live Transcription Panel (Left) */}
+            <div className="split-panel-col">
+              <div className="transcript-label live">Live Transcription:</div>
+              {isProcessingLive && !liveTranscript ? (
+                <div className="loader-container">
+                  <div className="loader"></div>
+                  <p className="loader-text">Processing live transcription...</p>
+                </div>
+              ) : (
+                <div className="text transcript-content">
+                  {(liveTranscript || "")}{partialText ? " " + partialText : ""}
+                </div>
               )}
-              {finalText && (
-                <>
-                  {liveTranscript && <div className="transcript-spacer"></div>}
-                  <div className="transcript-label enhanced">Enhanced version:</div>
-                  <div className="transcript-content">{finalText}</div>
-                </>
-              )}
+              {!liveTranscript && !isProcessingLive && <div className="hint">Live transcription will appear here.</div>}
             </div>
-          ) : (
-            <div className="hint">Speak or upload audio, and we'll turn it into text.</div>
-          )}
-        </div>
+
+            {/* Enhanced Transcription Panel (Right) */}
+            <div className="split-panel-col">
+              <div className="transcript-label enhanced">Enhanced Transcription:</div>
+              <div className="text transcript-content">
+                {finalText || "Final, enhanced transcription will appear here after stopping the recording."}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Single Panel for File Mode and Initial State */
+          <div className="panel">
+            {(isProcessingFile || isProcessingLive) ? (
+              <div className="loader-container">
+                <div className="loader"></div>
+                <p className="loader-text">
+                  {isProcessingFile ? `Processing your file... ${processingProgress}%` : "Processing live transcription..."}
+                </p>
+              </div>
+            ) : liveTranscript || finalText ? (
+              <div className="text">
+                {liveTranscript && (
+                  <>
+                    <div className="transcript-label live">Live:</div>
+                    <div className="transcript-content">{liveTranscript}{partialText ? " " + partialText : ""}</div>
+                    {finalText && <div className="transcript-spacer"></div>}
+                  </>
+                )}
+                {finalText && (
+                  <>
+                    <div className="transcript-label enhanced">Enhanced version:</div>
+                    <div className="transcript-content">{finalText}</div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="hint">Speak or upload audio, and we'll turn it into text.</div>
+            )}
+          </div>
+        )}
 
         {/* Sentiment Box */}
         <div className="sentiment-box">
