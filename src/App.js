@@ -50,6 +50,9 @@ export default function App() {
   const mediaRecorderRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
+  
+  // NEW: Ref for the transcript panel to enable scrolling
+  const transcriptPanelRef = useRef(null); 
 
   const [audioLevels, setAudioLevels] = useState(new Array(12).fill(0));
 
@@ -57,6 +60,15 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  //  Auto-scrolling logic
+  useEffect(() => {
+    const panel = transcriptPanelRef.current;
+    if (panel) {
+      // Set the scroll position to the bottom of the content
+      panel.scrollTop = panel.scrollHeight;
+    }
+  }, [liveTranscript, partialText]); // Trigger scroll whenever the transcript updates
 
   const toggleTheme = useCallback(() => {
     setTheme(prevTheme => prevTheme === 'dark' ? 'light' : 'dark');
@@ -455,8 +467,8 @@ export default function App() {
           <div className="status">Status: {status}</div>
         </div>
 
-        {/* Transcript */}
-        <div className="panel">
+        {/* Transcript - Ref attached here */}
+        <div className="panel" ref={transcriptPanelRef}> 
           {(isProcessingFile || isProcessingLive) ? (
             <div className="loader-container">
               <div className="loader"></div>
