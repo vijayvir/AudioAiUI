@@ -1,3 +1,51 @@
+# 🗣️ AI Speech-to-Text & Sentiment Analyzer
+
+A modern, full-stack application for real-time live transcription, file processing, and AI-driven sentiment analysis. This project features a React frontend that streams audio data to a FastAPI backend for instant insights.
+
+---
+
+## ✨ Features
+
+* **🎙️ Live Transcription:** Stream audio from your microphone via **WebSockets** with instant text feedback.
+* **📁 Batch File Processing:** Upload audio or video files for high-accuracy transcription with a simulated progress tracker.
+* **🧠 Sentiment Analysis:** Real-time emotional tone detection (Positive, Neutral, Negative) with distribution mapping.
+* **📝 AI Summarization:** Generate concise summaries of long conversations at the click of a button.
+* **💾 Multi-Format Export:** Download your results in `.txt`, `.docx`, `.pdf`, or `.srt` formats bundled in a `.zip` file.
+* **🌓 Adaptive UI:** Sleek Dark and Light mode support with local storage persistence.
+* **📈 Visual Waveform:** Real-time audio level visualization during recording sessions.
+
+---
+
+## 🚀 How it Works
+
+The application performs sophisticated audio signal processing directly in the browser:
+
+1.  **Audio Capture:** The app requests microphone access via the `getUserMedia` API at a sample rate of **16,000Hz**.
+2.  **Signal Processing:** Captures raw audio via a `ScriptProcessorNode` in 4096-sample chunks.
+3.  **Data Conversion:** Converts **Float32** samples into **16-bit Signed PCM** bytes to ensure backend compatibility and optimized bandwidth.
+4.  **Auto-Scrolling:** The transcript panel uses React `useRef` and `useEffect` hooks to automatically track the conversation flow.
+
+---
+
+## 🛠️ Technical Stack
+
+* **Frontend:** React.js (Functional Components, Hooks, and Refs)
+* **Audio Engine:** Web Audio API (AnalyserNode, AudioContext)
+* **Communication:** WebSockets (Real-time Streaming) & REST (Multipart File Uploads)
+* **Styling:** CSS3 Custom Properties (CSS Variables) for dynamic theming.
+
+---
+
+## ⚙️ Setup & Installation
+
+### 1. Environment Configuration
+Create a `.env` file in the root directory and update the URLs to match your local or deployed backend:
+
+```env
+REACT_APP_API_URL=[http://127.0.0.1:8000](http://127.0.0.1:8000)
+REACT_APP_WEBSOCKET_URL=ws://127.0.0.1:8000/ws
+
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
