@@ -336,8 +336,46 @@ export default function App() {
       // REST API call to process the uploaded file
       const res = await fetch(API_URL + "/file-transcribe", { method: "POST", body: fd });
 
-      setStatus("Processing...");
-      if (!res.ok) throw new Error(await res.text());
+        // When upload completes, start processing simulation
+        xhr.upload.addEventListener('loadend', () => {
+          uploadComplete = true;
+          setStatus("Processing...");
+          // Start processing simulation from 40%
+          simulateProcessingProgress(40);
+        });
+
+        // Handle response
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const responseData = JSON.parse(xhr.responseText);
+              // Stop processing simulation and complete to 100%
+              if (processingInterval) clearInterval(processingInterval);
+              setProcessingProgress(100);
+              resolve(responseData);
+            } catch (e) {
+              reject(new Error('Invalid JSON response'));
+            }
+          } else {
+            if (processingInterval) clearInterval(processingInterval);
+            reject(new Error(xhr.responseText || `Server error: ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          if (processingInterval) clearInterval(processingInterval);
+          reject(new Error('Network error occurred'));
+        });
+
+        xhr.addEventListener('abort', () => {
+          if (processingInterval) clearInterval(processingInterval);
+          reject(new Error('Upload aborted'));
+        });
+
+        // Start the request
+        xhr.open('POST', API_URL + "/file-transcribe");
+        xhr.send(fd);
+      });
 
       if (progressInterval) clearInterval(progressInterval);
       setProcessingProgress(100);
@@ -368,7 +406,7 @@ export default function App() {
 
     } catch (err) {
       console.error(err);
-      if (progressInterval) clearInterval(progressInterval);
+      if (processingInterval) clearInterval(processingInterval);
       alert("Transcription failed: " + err.message);
       setStatus("Failed");
     } finally {
