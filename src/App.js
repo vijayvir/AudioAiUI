@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import "./App.css";
 
 // Helper function to determine the initial UI theme (Dark/Light) based on browser storage
+// This ensures the user's preference persists after refreshing the page.
 const getInitialTheme = () => {
   if (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) {
     return localStorage.getItem('theme');
@@ -10,7 +11,8 @@ const getInitialTheme = () => {
 };
 
 // --- CONFIGURATION & ENVIRONMENT VARIABLES ---
-// Defines where the frontend connects to the FastAPI/Python backend
+// API_BASE_URL: Points to your backend (FastAPI/Python). 
+// WS_BASE_URL: The WebSocket endpoint for real-time streaming.
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000";
 const WS_BASE_URL = process.env.REACT_APP_WEBSOCKET_URL || "ws://127.0.0.1:8000/ws";
 const API_URL = API_BASE_URL.replace(/\/$/, "") + "/api"; // Standardized base for REST endpoints
@@ -21,29 +23,29 @@ export default function App() {
   const [tab, setTab] = useState("stt");
   const [lang, setLang] = useState("en-US");
   
-  // UI Status & Loading states
+  // UI Status & Loading states: Controls spinners and progress bars
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [isProcessingLive, setIsProcessingLive] = useState(false); 
   const [processingProgress, setProcessingProgress] = useState(0);
   const [status, setStatus] = useState("Idle");
 
-  // Transcription Data
-  const [finalText, setFinalText] = useState("");      // Completed, accurate transcription
-  const [partialText, setPartialText] = useState("");    // Real-time "guessing" text from server
-  const [liveTranscript, setLiveTranscript] = useState(""); // Cumulative live results
+  // Transcription Data: Stores the raw results from the server
+  const [finalText, setFinalText] = useState("");      // The high-accuracy result (processed)
+  const [partialText, setPartialText] = useState("");    // Intermediary "live" text (real-time)
+  const [liveTranscript, setLiveTranscript] = useState(""); // Aggregated results for live mode
   
-  // File & Session tracking
+  // File & Session tracking: Essential for the ZIP download functionality
   const [canCopy, setCanCopy] = useState(false);
   const [downloadFormat, setDownloadFormat] = useState("");
-  const [audioChunks, setAudioChunks] = useState([]);    // Raw audio data for local blob creation
-  const [audioBlob, setAudioBlob] = useState(null);      // Finalized audio file
-  const [fileToProcess, setFileToProcess] = useState(null); // Selected file for upload
-  const [liveSessionId, setLiveSessionId] = useState(null); // Server-side session reference
-  const [fileId, setFileId] = useState(null);               // Server-side file reference
-  const [lastMode, setLastMode] = useState(null);           // 'live' or 'file'
+  const [audioChunks, setAudioChunks] = useState([]);    // Used for local browser recording
+  const [audioBlob, setAudioBlob] = useState(null);      
+  const [fileToProcess, setFileToProcess] = useState(null); // The file object from the <input>
+  const [liveSessionId, setLiveSessionId] = useState(null); // ID for Live mode downloads
+  const [fileId, setFileId] = useState(null);               // ID for File mode downloads
+  const [lastMode, setLastMode] = useState(null);           // Tracks which ID to use for download ('live' vs 'file')
 
-  // Sentiment & Summary Analysis
+  // Sentiment & Summary Analysis: Stores AI-generated insights
   const [overallSentiment, setOverallSentiment] = useState({
     distribution: { positive: "0%", neutral: "0%", negative: "0%" },
     label: "Neutral",
@@ -53,7 +55,7 @@ export default function App() {
   const [summaryText, setSummaryText] = useState("");
 
   // --- REFS ---
-  // Used for persistent objects that shouldn't trigger re-renders (Audio/Sockets)
+  // We use refs for audio/socket objects so they persist without triggering re-renders
   const socketRef = useRef(null);
   const streamRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -62,18 +64,18 @@ export default function App() {
   const mediaRecorderRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
-  const transcriptPanelRef = useRef(null); // Ref for auto-scrolling logic
+  const transcriptPanelRef = useRef(null); // Ref for the auto-scrolling <div>
 
-  const [audioLevels, setAudioLevels] = useState(new Array(12).fill(0)); // Visualizer bars data
+  // State for the animated waveform visualizer (12 bars)
+  const [audioLevels, setAudioLevels] = useState(new Array(12).fill(0));
 
-  // Effect: Update the data-theme attribute on the HTML root whenever theme state changes
+  // Effect: Applies theme change to the <html> tag and saves to localStorage
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Effect: Auto-scrolling logic
-  // Automatically scrolls the transcription panel to the bottom when new text arrives
+  // Effect: Auto-scrolling logic. Fires whenever transcription text updates
   useEffect(() => {
     const panel = transcriptPanelRef.current;
     if (panel) {
@@ -81,15 +83,12 @@ export default function App() {
     }
   }, [liveTranscript, partialText]);
 
-  // Toggle between Light and Dark modes
+  // Toggle function for the Dark/Light mode switch
   const toggleTheme = useCallback(() => {
     setTheme(prevTheme => prevTheme === 'dark' ? 'light' : 'dark');
   }, []);
 
-  // Combined string for the display area
-  const displayText = (finalText ? finalText.trimEnd() : "") + (partialText ? " " + partialText : "");
-
-  // Helper for CSS class application based on sentiment label
+  // Helper to assign CSS classes for sentiment color highlighting
   const getSentimentClass = (label) => {
     const lower = label?.toLowerCase() || "";
     if (lower.includes("pos")) return "positive";
@@ -97,11 +96,11 @@ export default function App() {
     return "neutral";
   };
 
-  // ---- LIVE RECORDING LOGIC ----
+  // ---- LIVE RECORDING LOGIC (WEBSOCKETS) ----
   const startLive = async () => {
     try {
       setStatus("Requesting microphone…");
-      // Reset previous session data
+      // Reset all previous session states before starting a new one
       setFinalText("");
       setPartialText("");
       setLiveTranscript("");
@@ -112,46 +111,43 @@ export default function App() {
       setLiveSessionId(null);
       setLastMode("live");
 
-      // Request hardware access
+      // Initialize microphone stream (16kHz mono is standard for speech AI)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, sampleRate: 16000 } });
       streamRef.current = stream;
 
       setStatus("Connecting to Local Backend…");
-      // Connect to the WebSocket for streaming audio bits
       const cleanedWsBase = WS_BASE_URL.replace(/\/$/, "").replace("/ws", "");
       const ws = new WebSocket(cleanedWsBase + "/api/live-transcribe");
       socketRef.current = ws;
 
       ws.onopen = () => {
         setStatus("Connected, streaming audio…");
-
-        // Web Audio API setup to capture and process audio samples
+        
+        // Setup Web Audio API for real-time processing
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
         const source = audioCtx.createMediaStreamSource(stream);
         sourceRef.current = source;
 
-        // Analyser node for the visual waveform animation
+        // Setup Analyser for waveform visualization
         const analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.8;
         analyserRef.current = analyser;
 
-        // ScriptProcessor captures audio in chunks (4096 samples)
+        // Capture audio in chunks of 4096 samples
         const processor = audioCtx.createScriptProcessor(4096, 1, 1);
         processorRef.current = processor;
 
-        // Audio node routing: Mic -> Analyser -> Processor -> Destination
         source.connect(analyser);
         analyser.connect(processor);
         processor.connect(audioCtx.destination);
 
-        // This event fires whenever 4096 samples are ready to be sent
+        // This event converts Float32 mic data to Int16 before sending to backend
         processor.onaudioprocess = (e) => {
           const float32 = e.inputBuffer.getChannelData(0);
           let buffer = new ArrayBuffer(float32.length * 2);
           let view = new DataView(buffer);
-          // Convert Float32 audio samples to Int16 for efficient streaming
           for (let i = 0; i < float32.length; i++) {
             let s = Math.max(-1, Math.min(1, float32[i]));
             view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
@@ -159,7 +155,7 @@ export default function App() {
           if (ws.readyState === WebSocket.OPEN) ws.send(buffer);
         };
 
-        // Animation function for the waveform visualizer
+        // Recursive function to update the visualizer UI
         const updateWaveform = () => {
           if (!analyserRef.current) return;
           const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
@@ -177,7 +173,7 @@ export default function App() {
         };
         updateWaveform();
 
-        // Standard MediaRecorder for creating a downloadable blob later
+        // Secondary recorder to create a downloadable file of the live session
         const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
         mediaRecorderRef.current = mr;
         mr.ondataavailable = (evt) => {
@@ -188,35 +184,32 @@ export default function App() {
           setAudioBlob(blob);
           setAudioChunks([]);
         };
-        mr.start(1000); // Collect chunks every second
+        mr.start(1000);
       };
 
-      // Handle incoming messages from the backend (Transcriptions, Sentiment)
+      // Listener for results coming BACK from the server via WebSocket
       ws.onmessage = (msg) => {
         try {
           const data = JSON.parse(msg.data);
-
+          
+          // Capture session ID for ZIP download functionality
           if (data.session_id) setLiveSessionId(data.session_id);
 
           if (data.type === "final" && data.text) {
-            // "Final" means the server is certain about this sentence
             setLiveTranscript(prev => (prev.trimEnd() + " " + data.text).trim());
-            setPartialText("");
+            setPartialText(""); // Clear interim text when a full sentence is finalized
             if (data.sentiment) setOverallSentiment(data.sentiment);
           } else if (data.type === "partial" && data.text) {
-            // "Partial" is interim text while the user is still speaking
-            setPartialText(data.text);
+            setPartialText(data.text); // Display "guessing" text as user speaks
             if (data.sentiment) setOverallSentiment(data.sentiment);
           } else if (data.type === "session_end" && data.final_text) {
-            // Cleanup and summarize after session ends
-            const final = (data.final_text || "").trim();
-            const summary = data.summary || "";
-            setFinalText(final);
+            // Server has finished processing the entire stream
+            setFinalText((data.final_text || "").trim());
             setPartialText("");
             setStatus("✅ Final transcription ready");
             setCanCopy(true);
             if (data.overall_sentiment) setOverallSentiment(data.overall_sentiment);
-            if (summary) setSummaryText(summary);
+            if (data.summary) setSummaryText(data.summary);
             setIsProcessingLive(false);
           }
         } catch (e) {
@@ -224,27 +217,20 @@ export default function App() {
         }
       };
 
-      ws.onerror = (e) => {
-        console.error("WebSocket error", e);
+      ws.onerror = () => {
         setStatus("Error");
         stopLive(true);
-      };
-
-      ws.onclose = () => {
-        if (isRecording) setStatus("Waiting for final transcription...");
-        else setStatus("Closed");
       };
 
       setIsRecording(true);
       setAudioChunks([]);
     } catch (err) {
-      console.error("Mic/Connection error:", err);
       alert("Microphone permission or connection failed.");
       setStatus("Error");
     }
   };
 
-  // Stops audio tracks, closes WebSocket, and cleans up AudioContext
+  // Function to shut down microphone, socket, and audio context
   const stopLive = (isError = false) => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ text: "stop" }));
@@ -252,10 +238,7 @@ export default function App() {
       setIsProcessingLive(true); 
     }
 
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     setAudioLevels(new Array(12).fill(0));
 
     try {
@@ -277,10 +260,9 @@ export default function App() {
     }
   };
 
-  // ---- FILE UPLOAD & PROCESS LOGIC ----
+  // Handles selecting a file from local machine
   const onPickFile = (e) => {
     if (isRecording) stopLive(true);
-
     const file = e.target.files?.[0];
     setAudioBlob(null);
     setLiveSessionId(null);
@@ -294,14 +276,11 @@ export default function App() {
       setLiveTranscript("");
       setCanCopy(false);
       setStatus(`File Selected: ${file.name}`);
-    } else {
-      setFileToProcess(null);
-      setStatus("Idle");
-      setLastMode(null);
     }
-    e.target.value = ""; // Reset input so same file can be selected again
+    e.target.value = ""; // Clear input to allow re-selection of the same file
   };
 
+  // ---- FILE UPLOAD & PROCESSING LOGIC ----
   const onProcessFile = async () => {
     if (!fileToProcess) return;
     const file = fileToProcess;
@@ -312,19 +291,19 @@ export default function App() {
     setIsProcessingFile(true);
     setProcessingProgress(0);
 
-    // Simulates an upload bar since fetch doesn't provide natively granular upload progress
+    // Creates a pseudo-progress bar for the UI while the server works
     let progressInterval = null;
     const simulateProgress = () => {
       let progress = 0;
       progressInterval = setInterval(() => {
-        progress += Math.random() * 12 + 3;
+        progress += Math.random() * 8 + 2;
         if (progress >= 95) {
           progress = 95;
           setProcessingProgress(95);
         } else {
           setProcessingProgress(Math.min(Math.round(progress), 95));
         }
-      }, 300);
+      }, 400);
     };
 
     try {
@@ -333,64 +312,28 @@ export default function App() {
       fd.append("file", file);
       simulateProgress();
 
-      // REST API call to process the uploaded file
+      // Send the file to the REST endpoint
       const res = await fetch(API_URL + "/file-transcribe", { method: "POST", body: fd });
-
-        // When upload completes, start processing simulation
-        xhr.upload.addEventListener('loadend', () => {
-          uploadComplete = true;
-          setStatus("Processing...");
-          // Start processing simulation from 40%
-          simulateProcessingProgress(40);
-        });
-
-        // Handle response
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const responseData = JSON.parse(xhr.responseText);
-              // Stop processing simulation and complete to 100%
-              if (processingInterval) clearInterval(processingInterval);
-              setProcessingProgress(100);
-              resolve(responseData);
-            } catch (e) {
-              reject(new Error('Invalid JSON response'));
-            }
-          } else {
-            if (processingInterval) clearInterval(processingInterval);
-            reject(new Error(xhr.responseText || `Server error: ${xhr.status}`));
-          }
-        });
-
-        xhr.addEventListener('error', () => {
-          if (processingInterval) clearInterval(processingInterval);
-          reject(new Error('Network error occurred'));
-        });
-
-        xhr.addEventListener('abort', () => {
-          if (processingInterval) clearInterval(processingInterval);
-          reject(new Error('Upload aborted'));
-        });
-
-        // Start the request
-        xhr.open('POST', API_URL + "/file-transcribe");
-        xhr.send(fd);
-      });
-
-      if (progressInterval) clearInterval(progressInterval);
-      setProcessingProgress(100);
-      await new Promise(resolve => setTimeout(resolve, 300)); // Brief pause for visual smoothness
+      
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
 
       const data = await res.json();
+      
+      if (progressInterval) clearInterval(progressInterval);
+      setProcessingProgress(100);
+
+      // Extract results from server response
       const transcription = data?.transcription;
       const text = transcription?.text || transcription || "";
       const sentiment = data?.overall_sentiment || null;
       const summary = data?.summary || "";
 
+      // Store file_id to enable the ZIP download for this file
       if (data.file_id) {
         setFileId(data.file_id);
-         setLastMode("file"); 
+        setLastMode("file"); 
       }
+
       if (sentiment) setOverallSentiment({
         label: sentiment.label || "Neutral",
         score: sentiment.score || 0,
@@ -401,95 +344,82 @@ export default function App() {
       setFinalText(text);
       setCanCopy(!!text);
       setStatus("Complete");
-
       if (summary) setSummaryText(summary);
 
     } catch (err) {
-      console.error(err);
-      if (processingInterval) clearInterval(processingInterval);
+      console.error("Transcription failed:", err);
+      if (progressInterval) clearInterval(progressInterval);
       alert("Transcription failed: " + err.message);
       setStatus("Failed");
     } finally {
+      // Ensure UI states are reset even if an error occurs
       setIsProcessingFile(false);
       setProcessingProgress(0);
       setFileToProcess(null);
     }
   };
 
-  // ---- COPY TO CLIPBOARD ----
+  // Standard clipboard copy function
   const onCopy = async () => {
     if (!canCopy || !finalText.trim()) return;
     await navigator.clipboard.writeText(finalText.trim());
     alert("Copied to clipboard!");
   };
 
-  // ---- DOWNLOAD HANDLER ----
+  // ---- DOWNLOAD HANDLER: TRIGGERS ZIP DOWNLOAD FROM BACKEND ----
   const onDownload = async () => {
-    if (!finalText.trim()) {
-      alert("No final transcription to download.");
-      return;
-    }
-    if (!downloadFormat) {
-      alert("Please select a file type.");
-      return;
-    }
+    if (!finalText.trim()) return alert("No transcription to download.");
+    if (!downloadFormat) return alert("Please select a file type.");
 
     const format = downloadFormat;
     let downloadUrl = null;
 
-    // Directs the browser to the correct endpoint depending on if the work was Live or File-based
-    if (lastMode === "file" && fileId) downloadUrl = `${API_URL}/download-file-result/${fileId}?format=${format}`;
-    else if (lastMode === "live" && liveSessionId) downloadUrl = `${API_URL}/download-transcription/${liveSessionId}?format=${format}`;
-    else {
-      alert("No active session or file ID available to download.");
-      return;
+    // Logic to select the correct endpoint based on whether we processed a file or a live stream
+    if (lastMode === "file" && fileId) {
+        downloadUrl = `${API_URL}/download-file-result/${fileId}?format=${format}`;
+    } else if (lastMode === "live" && liveSessionId) {
+        downloadUrl = `${API_URL}/download-transcription/${liveSessionId}?format=${format}`;
+    } else {
+        return alert("No active session or file ID available.");
     }
 
-    setStatus(`Requesting ${format.toUpperCase()} download...`);
+    setStatus(`Downloading ${format.toUpperCase()}...`);
 
     try {
       const resp = await fetch(downloadUrl);
-      if (!resp.ok) throw new Error(`Download failed. Server returned status: ${resp.status}`);
-
+      if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
+      
+      // Convert response to a blob and trigger a browser download
       const blob = await resp.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `transcription_session_${format}.zip`;
+      a.download = `transcription_${format}.zip`;
       a.click();
-      window.URL.revokeObjectURL(url); // Clean up memory
+      window.URL.revokeObjectURL(url);
       setStatus("Download complete");
-
     } catch (err) {
-      console.error("Download failed:", err);
       alert("Download failed: " + err.message);
-      setStatus("Error during download");
+      setStatus("Error");
     }
   };
 
-  // ---- SUMMARIZATION TRIGGER ----
-  const onSummarize = async () => {
+  // Toggles the summary modal
+  const onSummarize = () => {
     if (!summaryText.trim() && !finalText.trim()) {
       alert("Please transcribe audio first.");
       return;
     }
-
-    if (summaryText.trim()) {
-      setShowSummaryModal(true);
-      return;
-    }
-
-    setSummaryText("⚠️ No summary available yet. Try transcribing a file or live session first.");
+    if (!summaryText.trim()) setSummaryText("No summary available yet.");
     setShowSummaryModal(true);
   };
 
-  // UI class determination for sentiment coloring
   const sentimentClass = getSentimentClass(overallSentiment.label);
 
   return (
     <div className="app">
       <div className="card">
-        {/* Header: Theme Toggle and App Title */}
+        {/* Header Section */}
         <div className="flex items-center justify-between mb-6">
           <div className="w-1/4">
             <button onClick={toggleTheme} className="theme-toggle">
@@ -502,7 +432,7 @@ export default function App() {
           <div className="w-1/4"></div>
         </div>
 
-        {/* Modal: Summary Display */}
+        {/* AI Summary Modal */}
         {showSummaryModal && (
           <div className="modal-overlay" onClick={() => setShowSummaryModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -513,23 +443,20 @@ export default function App() {
           </div>
         )}
 
-        {/* Controls: Language selection and Start/Stop buttons */}
+        {/* Live Controls Section */}
         <div className="row">
           <select value={lang} onChange={(e) => setLang(e.target.value)} className="select" disabled={isRecording}>
             <option value="en-US">English</option>
           </select>
-
           {!isRecording ? (
-            <button className="speak" onClick={startLive}>
-              <span className="mic">🎤</span> Start Recording
-            </button>
+            <button className="speak" onClick={startLive}><span className="mic">🎤</span> Start Recording</button>
           ) : (
             <>
               <button className="stop" onClick={() => stopLive(false)}>⏹ Stop</button>
-              {/* Waveform Visualization Bars */}
+              {/* Visual Waveform UI */}
               <div className="audio-waveform">
                 {audioLevels.map((level, i) => (
-                  <div key={i} className="waveform-bar" style={{ height: `${Math.max(20, level)}%`, transition: 'height 0.1s ease-out' }}></div>
+                  <div key={i} className="waveform-bar" style={{ height: `${Math.max(20, level)}%` }}></div>
                 ))}
               </div>
             </>
@@ -537,13 +464,13 @@ export default function App() {
           <div className="status">Status: {status}</div>
         </div>
 
-        {/* Transcription Panel: Displays live and final text */}
+        {/* Transcription Display Panel */}
         <div className="panel" ref={transcriptPanelRef}> 
           {(isProcessingFile || isProcessingLive) ? (
             <div className="loader-container">
               <div className="loader"></div>
               <p className="loader-text">
-                {isProcessingFile ? `Processing your file... ${processingProgress}%` : "Processing live transcription..."}
+                {isProcessingFile ? `Processing file... ${processingProgress}%` : "Processing live transcription..."}
               </p>
             </div>
           ) : liveTranscript || finalText ? (
@@ -561,50 +488,42 @@ export default function App() {
                   <div className="transcript-content">{finalText}</div>
                 </>
               )}
-              {!liveTranscript && !isProcessingLive && <div className="hint">Live transcription will appear here.</div>}
             </div>
           ) : (
             <div className="hint">Speak or upload audio, and we'll turn it into text.</div>
           )}
         </div>
 
-        {/* Sentiment Analysis Display */}
+        {/* Sentiment Analysis Bar */}
         <div className="sentiment-box">
           <div className="sentiment-row">
             <span className="sentiment-title">🧠 Sentiment Analysis</span>
             <span className="sentiment-sep">|</span>
-            <span className={`sentiment-label ${sentimentClass}`}>Overall Sentiment: {overallSentiment.label?.toUpperCase() || 'N/A'}</span>
+            <span className={`sentiment-label ${sentimentClass}`}>Overall: {overallSentiment.label?.toUpperCase()}</span>
             <span className="sentiment-sep">|</span>
-            <span className="sentiment-positive">😊 Positive: {overallSentiment.distribution?.positive || "0%"}</span>
+            <span className="sentiment-positive">😊 Pos: {overallSentiment.distribution?.positive}</span>
             <span className="sentiment-sep">|</span>
-            <span className="sentiment-neutral">😐 Neutral: {overallSentiment.distribution?.neutral || "0%"}</span>
-            <span className="sentiment-sep">|</span>
-            <span className="sentiment-negative">😠 Negative: {overallSentiment.distribution?.negative || "0%"}</span>
+            <span className="sentiment-neutral">😐 Neu: {overallSentiment.distribution?.neutral}</span>
+            <span className="sentiment-negative">😠 Neg: {overallSentiment.distribution?.negative}</span>
           </div>
         </div>
 
-        {/* Divider for File Upload section */}
-        <div className="or">
-          <div className="line" />
-          <div className="or-text">OR</div>
-          <div className="line" />
-        </div>
+        {/* File Upload Section */}
+        <div className="or"><div className="line" /><div className="or-text">OR</div><div className="line" /></div>
 
-        {/* File Selection Logic */}
         <label className="transcribe file-btn">
           Use Your Own File
           <input type="file" accept="audio/*,video/*" onChange={onPickFile} hidden />
         </label>
-
         <button className="transcribe" onClick={onProcessFile} disabled={!fileToProcess || isRecording}>
-          {fileToProcess ? `Process File: ${fileToProcess.name}` : "Process File"}
+          {fileToProcess ? `Process: ${fileToProcess.name}` : "Process File"}
         </button>
 
-        {/* Footer: Copy, Download, and Summary actions */}
+        {/* Footer Action Row (Copy, Summarize, Download) */}
         <div className="footer footer-row">
           <button className="btn btn-secondary" onClick={onSummarize}><span className="tab-emoji">📝</span> Summarization</button>
           <span className="footer-sep">|</span>
-          <button className="btn btn-secondary" onClick={onCopy} disabled={!finalText}>Copy Generated Text</button>
+          <button className="btn btn-secondary" onClick={onCopy} disabled={!finalText}>Copy Text</button>
           <span className="footer-sep">|</span>
           <select className="select select--fancy" value={downloadFormat} onChange={(e) => setDownloadFormat(e.target.value)} disabled={!(liveSessionId || fileId) || !finalText}>
             <option value="">Select File Type</option>
